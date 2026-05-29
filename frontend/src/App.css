@@ -1,0 +1,141 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  color: white;
+  padding: 24px;
+  text-align: center;
+}
+
+.app-header h1 {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.app-header p {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.app-main {
+  flex: 1;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  width: 100%;
+}
+
+.status-section,
+.events-section,
+.voice-section {
+  margin-bottom: 24px;
+}
+
+.status-section h2,
+.events-section h2,
+.voice-section h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #1f1f1f;
+}
+
+.status-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.status-card p {
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+.status-ok {
+  color: #52c41a;
+  font-weight: 600;
+}
+
+.status-error {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #1890ff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #40a9ff;
+}
+
+.btn-voice {
+  background: linear-gradient(135deg, #722ed1 0%, #9254de 100%);
+  color: white;
+  padding: 14px 32px;
+  font-size: 16px;
+  border-radius: 50px;
+  width: 100%;
+}
+
+.btn-voice:hover {
+  opacity: 0.9;
+}
+
+.no-events {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #999;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.voice-controls {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.voice-hint {
+  margin-top: 12px;
+  color: #999;
+  font-size: 13px;
+}
+
+.app-footer {
+  background: #f0f0f0;
+  padding: 16px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+}
