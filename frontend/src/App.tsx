@@ -8,6 +8,7 @@ import EventModal from './components/EventModal'
 import VoiceFeedback from './components/VoiceFeedback'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
+import { useReminder } from './hooks/useReminder'
 import { parseVoiceCommand } from './utils/voiceCommandParser'
 import type { ParsedCommand } from './utils/voiceCommandParser'
 import './App.css'
@@ -52,11 +53,23 @@ function App() {
   } = useSpeechRecognition();
 
   const { speak, isSpeaking } = useSpeechSynthesis();
+  const { requestPermission, hasPermission, scheduleReminder } = useReminder();
 
   useEffect(() => {
     fetchCalendars();
     fetchEvents();
+    requestPermission();
   }, []);
+
+  useEffect(() => {
+    if (hasPermission && events.length > 0) {
+      events.forEach(event => {
+        if (event.reminder_minutes && new Date(event.start_time) > new Date()) {
+          scheduleReminder(event);
+        }
+      });
+    }
+  }, [events, hasPermission]);
 
   useEffect(() => {
     if (transcript) {
