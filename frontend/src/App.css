@@ -348,6 +348,18 @@ body {
   flex: 1;
   overflow: auto;
   background: #f8f9fa;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Month View */
@@ -564,6 +576,26 @@ body {
   cursor: pointer;
   z-index: 1;
   overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.week-event:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.week-event[draggable="true"] {
+  cursor: grab;
+}
+
+.week-event[draggable="true"]:active {
+  cursor: grabbing;
+  opacity: 0.8;
+}
+
+.week-cell.drag-over {
+  background-color: #e6f7ff;
+  border: 2px dashed #1890ff;
 }
 
 /* Day View */

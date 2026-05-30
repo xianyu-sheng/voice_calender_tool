@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface Event {
   id: number;
@@ -13,14 +13,52 @@ interface WeekViewProps {
   events: Event[];
   onTimeClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
+  onEventDrop?: (eventId: number, newStartTime: Date, newEndTime: Date) => void;
 }
 
 const WeekView: React.FC<WeekViewProps> = ({
   currentDate,
   events,
   onTimeClick,
-  onEventClick
+  onEventClick,
+  onEventDrop
 }) => {
+  const [draggedEvent, setDraggedEvent] = useState<Event | null>(null);
+  const [dragOverCell, setDragOverCell] = useState<{ date: Date; hour: number } | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, event: Event) => {
+    setDraggedEvent(event);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, date: Date, hour: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverCell({ date, hour });
+  };
+
+  const handleDragLeave = () => {
+    setDragOverCell(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, date: Date, hour: number) => {
+    e.preventDefault();
+    setDragOverCell(null);
+
+    if (draggedEvent && onEventDrop) {
+      const eventStart = new Date(draggedEvent.start_time);
+      const eventEnd = new Date(draggedEvent.end_time);
+      const duration = eventEnd.getTime() - eventStart.getTime();
+
+      const newStartTime = new Date(date);
+      newStartTime.setHours(hour, 0, 0, 0);
+      const newEndTime = new Date(newStartTime.getTime() + duration);
+
+      onEventDrop(draggedEvent.id, newStartTime, newEndTime);
+    }
+    setDraggedEvent(null);
+  };
+
   const getWeekDates = () => {
     const dates = [];
     const startOfWeek = new Date(currentDate);
@@ -96,18 +134,23 @@ const WeekView: React.FC<WeekViewProps> = ({
                 return (
                   <div
                     key={hour}
-                    className="week-cell"
+                    className={`week-cell ${dragOverCell && dragOverCell.date.toDateString() === date.toDateString() && dragOverCell.hour === hour ? 'drag-over' : ''}`}
                     onClick={() => {
                       const clickDate = new Date(date);
                       clickDate.setHours(hour, 0, 0, 0);
                       onTimeClick(clickDate);
                     }}
+                    onDragOver={(e) => handleDragOver(e, date, hour)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, date, hour)}
                   >
                     {hourEvents.map(event => (
                       <div
                         key={event.id}
                         className="week-event"
                         style={{ backgroundColor: event.color || '#1890ff' }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, event)}
                         onClick={(e) => {
                           e.stopPropagation();
                           onEventClick(event);
