@@ -9,6 +9,7 @@ interface HeaderProps {
   onViewChange: (view: 'day' | 'week' | 'month') => void;
   onVoiceStart: () => void;
   isListening: boolean;
+  isSupported?: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -19,7 +20,8 @@ const Header: React.FC<HeaderProps> = ({
   view,
   onViewChange,
   onVoiceStart,
-  isListening
+  isListening,
+  isSupported = true
 }) => {
   const monthNames = [
     '一月', '二月', '三月', '四月', '五月', '六月',
@@ -83,15 +85,17 @@ const Header: React.FC<HeaderProps> = ({
         </div>
 
         <button
-          className={`btn-voice ${isListening ? 'listening' : ''}`}
+          className={`btn-voice ${isListening ? 'listening' : ''} ${!isSupported ? 'disabled' : ''}`}
           onClick={onVoiceStart}
+          disabled={!isSupported}
+          title={!isSupported ? '您的浏览器不支持语音识别' : ''}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10 3a1 1 0 00-1 1v4a1 1 0 002 0V4a1 1 0 00-1-1z"/>
             <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 110-12 6 6 0 010 12z"/>
             <path d="M10 14a4 4 0 100-8 4 4 0 000 8zm0-2a2 2 0 110-4 2 2 0 010 4z"/>
           </svg>
-          {isListening ? '正在聆听...' : '语音输入'}
+          {!isSupported ? '不支持语音' : isListening ? '正在聆听...' : '语音输入'}
         </button>
       </div>
     </header>

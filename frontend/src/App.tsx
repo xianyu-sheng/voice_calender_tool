@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import MonthView from './components/MonthView'
 import WeekView from './components/WeekView'
 import DayView from './components/DayView'
 import EventModal from './components/EventModal'
+import VoiceFeedback from './components/VoiceFeedback'
+import { useSpeechRecognition } from './hooks/useSpeechRecognition'
+import { parseVoiceCommand } from './utils/voiceCommandParser'
+import type { ParsedCommand } from './utils/voiceCommandParser'
 import './App.css'
 
 interface CalendarEvent {
@@ -30,15 +34,32 @@ function App() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [activeCalendars, setActiveCalendars] = useState<number[]>([]);
-  const [isListening, setIsListening] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [_selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    error: speechError,
+    isSupported,
+    startListening,
+    stopListening,
+    resetTranscript
+  } = useSpeechRecognition();
 
   useEffect(() => {
     fetchCalendars();
     fetchEvents();
   }, []);
+
+  useEffect(() => {
+    if (transcript) {
+      handleVoiceCommand(transcript);
+    }
+  }, [transcript]);
 
   const fetchCalendars = async () => {
     try {
@@ -62,6 +83,95 @@ function App() {
       }
     } catch (error) {
       console.error('Error fetching events:', error);
+    }
+  };
+
+  const handleVoiceCommand = useCallback(async (text: string) => {
+    const command = parseVoiceCommand(text);
+    console.log('Parsed command:', command);
+
+    switch (command.intent) {
+      case 'create_event':
+        await handleVoiceCreateEvent(command);
+        break;
+      case 'view_events':
+        handleVoiceViewEvents(command);
+        break;
+      case 'delete_event':
+        setVoiceFeedback('请在界面上选择要删除的事件');
+        break;
+      default:
+        setVoiceFeedback('抱歉，我没有理解您的指令。请试试"创建事件"或"查看今天"');
+    }
+
+    setTimeout(() => setVoiceFeedback(null), 3000);
+    resetTranscript();
+  }, []);
+
+  const handleVoiceCreateEvent = async (command: ParsedCommand) => {
+    const now = new Date();
+    let startDate = new Date(now);
+
+    if (command.date) {
+      startDate = new Date(command.date);
+    }
+
+    if (command.time) {
+      const [hours, minutes] = command.time.split(':').map(Number);
+      startDate.setHours(hours, minutes, 0, 0);
+    } else {
+      startDate.setHours(now.getHours() + 1, 0, 0, 0);
+    }
+
+    const endDate = new Date(startDate);
+    endDate.setHours(endDate.getHours() + 1);
+
+    const eventData = {
+      title: command.title || '新事件',
+      start_time: startDate.toISOString(),
+      end_time: endDate.toISOString(),
+      location: command.location,
+      reminder_minutes: 15
+    };
+
+    try {
+      const response = await fetch('http://localhost:8000/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(eventData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setVoiceFeedback(`已创建事件: ${eventData.title}`);
+        fetchEvents();
+      }
+    } catch (error) {
+      setVoiceFeedback('创建事件失败，请重试');
+    }
+  };
+
+  const handleVoiceViewEvents = (command: ParsedCommand) => {
+    const text = command.rawText;
+
+    if (text.includes('今天')) {
+      setCurrentDate(new Date());
+      setView('day');
+      setVoiceFeedback('已切换到今天');
+    } else if (text.includes('明天')) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      setCurrentDate(tomorrow);
+      setView('day');
+      setVoiceFeedback('已切换到明天');
+    } else if (text.includes('本周') || text.includes('这周')) {
+      setCurrentDate(new Date());
+      setView('week');
+      setVoiceFeedback('已切换到本周视图');
+    } else if (text.includes('本月') || text.includes('这个月')) {
+      setCurrentDate(new Date());
+      setView('month');
+      setVoiceFeedback('已切换到本月视图');
     }
   };
 
@@ -119,8 +229,12 @@ function App() {
     );
   };
 
-  const handleVoiceStart = () => {
-    setIsListening(!isListening);
+  const handleVoiceToggle = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
   };
 
   const handleSaveEvent = async (event: { id?: number; title: string; start_time: string; end_time: string; description?: string; location?: string; reminder_minutes?: number }) => {
@@ -175,8 +289,9 @@ function App() {
         onToday={handleToday}
         view={view}
         onViewChange={setView}
-        onVoiceStart={handleVoiceStart}
+        onVoiceStart={handleVoiceToggle}
         isListening={isListening}
+        isSupported={isSupported}
       />
 
       <div className="app-body">
@@ -215,6 +330,13 @@ function App() {
           )}
         </main>
       </div>
+
+      <VoiceFeedback
+        isListening={isListening}
+        transcript={interimTranscript}
+        feedback={voiceFeedback}
+        error={speechError}
+      />
 
       <EventModal
         event={selectedEvent}
