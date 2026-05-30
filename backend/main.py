@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from app import db
+from app.api import events_bp, calendars_bp, reminders_bp
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
@@ -9,6 +10,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///calendar.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+
+app.register_blueprint(events_bp)
+app.register_blueprint(calendars_bp)
+app.register_blueprint(reminders_bp)
 
 with app.app_context():
     db.create_all()
