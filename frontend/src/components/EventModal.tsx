@@ -35,6 +35,8 @@ const EventModal: React.FC<EventModalProps> = ({
     location: '',
     reminder_minutes: 15
   });
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (event) {
@@ -55,16 +57,53 @@ const EventModal: React.FC<EventModalProps> = ({
         reminder_minutes: 15
       });
     }
-  }, [event]);
+    setErrors({});
+  }, [event, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validateForm = (): boolean => {
+    const newErrors: {[key: string]: string} = {};
+
+    if (!formData.title.trim()) {
+      newErrors.title = '请输入事件标题';
+    }
+
+    if (!formData.start_time) {
+      newErrors.start_time = '请选择开始时间';
+    }
+
+    if (!formData.end_time) {
+      newErrors.end_time = '请选择结束时间';
+    }
+
+    if (formData.start_time && formData.end_time) {
+      const start = new Date(formData.start_time);
+      const end = new Date(formData.end_time);
+      if (end <= start) {
+        newErrors.end_time = '结束时间必须晚于开始时间';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+    try {
+      await onSave(formData);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = () => {
     if (event?.id && onDelete) {
-      onDelete(event.id);
+      if (window.confirm('确定要删除这个事件吗？')) {
+        onDelete(event.id);
+      }
     }
   };
 
@@ -83,39 +122,51 @@ const EventModal: React.FC<EventModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="event-form">
-          <div className="form-group">
-            <label htmlFor="title">事件标题</label>
+          <div className={`form-group ${errors.title ? 'has-error' : ''}`}>
+            <label htmlFor="title">事件标题 *</label>
             <input
               type="text"
               id="title"
               value={formData.title}
-              onChange={e => setFormData({ ...formData, title: e.target.value })}
+              onChange={e => {
+                setFormData({ ...formData, title: e.target.value });
+                if (errors.title) setErrors({ ...errors, title: '' });
+              }}
               placeholder="输入事件标题"
-              required
+              className={errors.title ? 'input-error' : ''}
             />
+            {errors.title && <span className="error-message">{errors.title}</span>}
           </div>
 
           <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="start_time">开始时间</label>
+            <div className={`form-group ${errors.start_time ? 'has-error' : ''}`}>
+              <label htmlFor="start_time">开始时间 *</label>
               <input
                 type="datetime-local"
                 id="start_time"
                 value={formData.start_time}
-                onChange={e => setFormData({ ...formData, start_time: e.target.value })}
-                required
+                onChange={e => {
+                  setFormData({ ...formData, start_time: e.target.value });
+                  if (errors.start_time) setErrors({ ...errors, start_time: '' });
+                }}
+                className={errors.start_time ? 'input-error' : ''}
               />
+              {errors.start_time && <span className="error-message">{errors.start_time}</span>}
             </div>
 
-            <div className="form-group">
-              <label htmlFor="end_time">结束时间</label>
+            <div className={`form-group ${errors.end_time ? 'has-error' : ''}`}>
+              <label htmlFor="end_time">结束时间 *</label>
               <input
                 type="datetime-local"
                 id="end_time"
                 value={formData.end_time}
-                onChange={e => setFormData({ ...formData, end_time: e.target.value })}
-                required
+                onChange={e => {
+                  setFormData({ ...formData, end_time: e.target.value });
+                  if (errors.end_time) setErrors({ ...errors, end_time: '' });
+                }}
+                className={errors.end_time ? 'input-error' : ''}
               />
+              {errors.end_time && <span className="error-message">{errors.end_time}</span>}
             </div>
           </div>
 
@@ -168,11 +219,11 @@ const EventModal: React.FC<EventModalProps> = ({
               </button>
             )}
             <div className="form-actions-right">
-              <button type="button" className="btn btn-secondary" onClick={onClose}>
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
                 取消
               </button>
-              <button type="submit" className="btn btn-primary">
-                {isEdit ? '保存' : '创建'}
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                {isSubmitting ? '保存中...' : (isEdit ? '保存' : '创建')}
               </button>
             </div>
           </div>
