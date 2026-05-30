@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface Event {
   id: number;
@@ -6,6 +6,7 @@ interface Event {
   start_time: string;
   end_time: string;
   color?: string;
+  location?: string;
 }
 
 interface MonthViewProps {
@@ -21,6 +22,8 @@ const MonthView: React.FC<MonthViewProps> = ({
   onDateClick,
   onEventClick
 }) => {
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -34,6 +37,14 @@ const MonthView: React.FC<MonthViewProps> = ({
       const eventDate = new Date(event.start_time);
       return eventDate.toDateString() === date.toDateString();
     });
+  };
+
+  const handleDayClick = (date: Date, dayEvents: Event[]) => {
+    const dateKey = date.toDateString();
+    if (dayEvents.length > 0) {
+      setExpandedDate(expandedDate === dateKey ? null : dateKey);
+    }
+    onDateClick(date);
   };
 
   const renderCalendarDays = () => {
@@ -57,38 +68,56 @@ const MonthView: React.FC<MonthViewProps> = ({
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
       const isToday = date.toDateString() === today.toDateString();
       const dayEvents = getEventsForDate(date);
+      const dateKey = date.toDateString();
+      const isExpanded = expandedDate === dateKey;
 
       days.push(
         <div
           key={day}
-          className={`calendar-day ${isToday ? 'today' : ''}`}
-          onClick={() => onDateClick(date)}
+          className={`calendar-day ${isToday ? 'today' : ''} ${isExpanded ? 'expanded' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`}
+          onClick={() => handleDayClick(date, dayEvents)}
         >
-          <span className={`day-number ${isToday ? 'today-number' : ''}`}>
-            {day}
-          </span>
-          <div className="day-events">
-            {dayEvents.slice(0, 3).map(event => (
-              <div
-                key={event.id}
-                className="event-item"
-                style={{ backgroundColor: event.color || '#1890ff' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEventClick(event);
-                }}
-              >
-                <span className="event-time">
-                  {new Date(event.start_time).getHours().toString().padStart(2, '0')}:
-                  {new Date(event.start_time).getMinutes().toString().padStart(2, '0')}
-                </span>
-                <span className="event-title">{event.title}</span>
-              </div>
-            ))}
-            {dayEvents.length > 3 && (
-              <div className="event-more">+{dayEvents.length - 3} 更多</div>
+          <div className="day-header">
+            <span className={`day-number ${isToday ? 'today-number' : ''}`}>
+              {day}
+            </span>
+            {dayEvents.length > 0 && (
+              <span className="event-count">{dayEvents.length}</span>
             )}
           </div>
+          {!isExpanded && dayEvents.length > 0 && (
+            <div className="event-dots">
+              {dayEvents.slice(0, 3).map((event) => (
+                <span
+                  key={event.id}
+                  className="event-dot"
+                  style={{ backgroundColor: event.color || '#1890ff' }}
+                />
+              ))}
+              {dayEvents.length > 3 && <span className="more-dots">+{dayEvents.length - 3}</span>}
+            </div>
+          )}
+          {isExpanded && (
+            <div className="day-events-expanded">
+              {dayEvents.map(event => (
+                <div
+                  key={event.id}
+                  className="event-item-compact"
+                  style={{ borderLeftColor: event.color || '#1890ff' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEventClick(event);
+                  }}
+                >
+                  <span className="event-time-compact">
+                    {new Date(event.start_time).getHours().toString().padStart(2, '0')}:
+                    {new Date(event.start_time).getMinutes().toString().padStart(2, '0')}
+                  </span>
+                  <span className="event-title-compact">{event.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
@@ -109,13 +138,13 @@ const MonthView: React.FC<MonthViewProps> = ({
   return (
     <div className="month-view">
       <div className="weekday-header">
-        <div className="weekday">周日</div>
-        <div className="weekday">周一</div>
-        <div className="weekday">周二</div>
-        <div className="weekday">周三</div>
-        <div className="weekday">周四</div>
-        <div className="weekday">周五</div>
-        <div className="weekday">周六</div>
+        <div className="weekday">日</div>
+        <div className="weekday">一</div>
+        <div className="weekday">二</div>
+        <div className="weekday">三</div>
+        <div className="weekday">四</div>
+        <div className="weekday">五</div>
+        <div className="weekday">六</div>
       </div>
       <div className="calendar-grid">
         {renderCalendarDays()}
