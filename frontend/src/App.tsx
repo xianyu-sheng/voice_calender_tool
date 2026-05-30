@@ -7,6 +7,7 @@ import DayView from './components/DayView'
 import EventModal from './components/EventModal'
 import VoiceFeedback from './components/VoiceFeedback'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
+import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
 import { parseVoiceCommand } from './utils/voiceCommandParser'
 import type { ParsedCommand } from './utils/voiceCommandParser'
 import './App.css'
@@ -50,6 +51,8 @@ function App() {
     resetTranscript
   } = useSpeechRecognition();
 
+  const { speak, isSpeaking } = useSpeechSynthesis();
+
   useEffect(() => {
     fetchCalendars();
     fetchEvents();
@@ -60,6 +63,12 @@ function App() {
       handleVoiceCommand(transcript);
     }
   }, [transcript]);
+
+  useEffect(() => {
+    if (voiceFeedback) {
+      speak(voiceFeedback);
+    }
+  }, [voiceFeedback]);
 
   const fetchCalendars = async () => {
     try {
@@ -336,6 +345,7 @@ function App() {
         transcript={interimTranscript}
         feedback={voiceFeedback}
         error={speechError}
+        isSpeaking={isSpeaking}
       />
 
       <EventModal

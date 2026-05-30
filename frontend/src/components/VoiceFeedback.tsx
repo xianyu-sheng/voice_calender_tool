@@ -5,15 +5,17 @@ interface VoiceFeedbackProps {
   transcript: string;
   feedback: string | null;
   error: string | null;
+  isSpeaking?: boolean;
 }
 
 const VoiceFeedback: React.FC<VoiceFeedbackProps> = ({
   isListening,
   transcript,
   feedback,
-  error
+  error,
+  isSpeaking = false
 }) => {
-  if (!isListening && !feedback && !error) {
+  if (!isListening && !feedback && !error && !isSpeaking) {
     return null;
   }
 
@@ -35,10 +37,18 @@ const VoiceFeedback: React.FC<VoiceFeedbackProps> = ({
       )}
 
       {feedback && !isListening && (
-        <div className="voice-message voice-success">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 16A8 8 0 108 0a8 8 0 000 16zm3.78-9.72a.75.75 0 00-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l4.25-4.25z"/>
-          </svg>
+        <div className={`voice-message ${isSpeaking ? 'voice-speaking' : 'voice-success'}`}>
+          {isSpeaking ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="speaking-icon">
+              <path d="M8 3a.5.5 0 01.5.5v5a.5.5 0 01-1 0v-5A.5.5 0 018 3z"/>
+              <path d="M10.5 8a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
+              <path d="M12 8a4 4 0 11-8 0 4 4 0 018 0zm-1 0a3 3 0 10-6 0 3 3 0 006 0z"/>
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 16A8 8 0 108 0a8 8 0 000 16zm3.78-9.72a.75.75 0 00-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l4.25-4.25z"/>
+            </svg>
+          )}
           {feedback}
         </div>
       )}
