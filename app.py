@@ -4,15 +4,20 @@ import webbrowser
 import threading
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-from app import db
-from app.api import events_bp, calendars_bp, reminders_bp
 
 def get_base_path():
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
-app = Flask(__name__, static_folder=os.path.join(get_base_path(), 'frontend', 'dist'))
+base_path = get_base_path()
+
+sys.path.insert(0, os.path.join(base_path, 'backend'))
+
+from app import db
+from app.api import events_bp, calendars_bp, reminders_bp
+
+app = Flask(__name__, static_folder=os.path.join(base_path, 'frontend', 'dist'))
 CORS(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///calendar.db'

@@ -8,7 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('frontend/dist', 'frontend/dist'),
-        ('app', 'app'),
+        ('backend/app', 'backend/app'),
     ],
     hiddenimports=[
         'flask',
