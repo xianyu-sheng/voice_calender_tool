@@ -38,7 +38,7 @@ function App() {
   const [activeCalendars, setActiveCalendars] = useState<number[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [_selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [, setSelectedDate] = useState<Date | null>(null);
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
 
   const {
@@ -251,6 +251,34 @@ function App() {
     );
   };
 
+  const handleEventDrop = async (eventId: number, newStartTime: Date, newEndTime: Date) => {
+    const event = events.find(e => e.id === eventId);
+    if (!event) return;
+
+    const updatedEvent = {
+      ...event,
+      start_time: newStartTime.toISOString(),
+      end_time: newEndTime.toISOString()
+    };
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/events/${eventId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvent)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setVoiceFeedback(`已移动事件: ${event.title}`);
+        fetchEvents();
+      }
+    } catch (error) {
+      console.error('Error moving event:', error);
+      setVoiceFeedback('移动事件失败，请重试');
+    }
+  };
+
   const handleVoiceToggle = () => {
     if (isListening) {
       stopListening();
@@ -298,9 +326,11 @@ function App() {
     }
   };
 
-  const filteredEvents = events.filter(event =>
-    activeCalendars.includes(event.id % calendars.length || 1)
-  );
+  const filteredEvents = events.filter(event => {
+    if (calendars.length === 0) return true;
+    const calendarId = event.id % calendars.length || 1;
+    return activeCalendars.includes(calendarId);
+  });
 
   return (
     <div className="app">
@@ -340,6 +370,7 @@ function App() {
               events={filteredEvents}
               onTimeClick={handleTimeClick}
               onEventClick={handleEventClick}
+              onEventDrop={handleEventDrop}
             />
           )}
           {view === 'day' && (
