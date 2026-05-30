@@ -4,6 +4,7 @@ export interface ParsedCommand {
   date?: string;
   time?: string;
   location?: string;
+  reminderMinutes?: number;
   rawText: string;
 }
 
@@ -40,7 +41,10 @@ const TIME_PATTERNS = {
     tomorrow: /明天/,
     dayAfterTomorrow: /后天/,
     nextWeek: /下周(一|二|三|四|五|六|日|天)/,
+    nextNextWeek: /下下周(一|二|三|四|五|六|日|天)/,
     specificDate: /(\d{1,2})月(\d{1,2})[日号]/,
+    relativeDays: /(\d+|[一二三四五六七八九十]+)天后/,
+    relativeWeeks: /(\d+|[一二三四五六七八九十]+)周后/,
   },
   time: {
     morning: /上午|早上/,
@@ -48,7 +52,16 @@ const TIME_PATTERNS = {
     evening: /晚上/,
     specificHour: /(\d{1,2})[点时](\d{1,2})?分?/,
     chineseHour: /(一|二|三|四|五|六|七|八|九|十|十一|十二)点/,
+    relativeHours: /(\d+|[一二三四五六七八九十]+)小时后/,
+    relativeMinutes: /(\d+|[一二三四五六七八九十]+)分钟后/,
+    halfHour: /半/,
   },
+};
+
+const CHINESE_NUMBER_MAP: { [key: string]: number } = {
+  '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+  '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+  '十一': 11, '十二': 12, '两': 2,
 };
 
 const CHINESE_NUMBERS: { [key: string]: number } = {
@@ -57,9 +70,18 @@ const CHINESE_NUMBERS: { [key: string]: number } = {
   '十一': 11, '十二': 12,
 };
 
-function extractTime(text: string): { date?: string; time?: string } {
+function parseChineseNumber(text: string): number {
+  if (CHINESE_NUMBER_MAP[text]) {
+    return CHINESE_NUMBER_MAP[text];
+  }
+  const num = parseInt(text);
+  return isNaN(num) ? 0 : num;
+}
+
+function extractTime(text: string): { date?: string; time?: string; reminderMinutes?: number } {
   let date: string | undefined;
   let time: string | undefined;
+  let reminderMinutes: number | undefined;
 
   const today = new Date();
 
@@ -75,12 +97,52 @@ function extractTime(text: string): { date?: string; time?: string } {
     date = dayAfter.toISOString().split('T')[0];
   }
 
+  const nextWeekMatch = text.match(TIME_PATTERNS.date.nextWeek);
+  if (nextWeekMatch) {
+    const dayMap: { [key: string]: number } = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
+    const targetDay = dayMap[nextWeekMatch[1]] ?? 0;
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const currentDay = nextWeek.getDay();
+    const diff = targetDay - currentDay;
+    nextWeek.setDate(nextWeek.getDate() + (diff >= 0 ? diff : diff + 7));
+    date = nextWeek.toISOString().split('T')[0];
+  }
+
+  const nextNextWeekMatch = text.match(TIME_PATTERNS.date.nextNextWeek);
+  if (nextNextWeekMatch) {
+    const dayMap: { [key: string]: number } = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
+    const targetDay = dayMap[nextNextWeekMatch[1]] ?? 0;
+    const nextNextWeek = new Date(today);
+    nextNextWeek.setDate(nextNextWeek.getDate() + 14);
+    const currentDay = nextNextWeek.getDay();
+    const diff = targetDay - currentDay;
+    nextNextWeek.setDate(nextNextWeek.getDate() + (diff >= 0 ? diff : diff + 7));
+    date = nextNextWeek.toISOString().split('T')[0];
+  }
+
   const specificDateMatch = text.match(TIME_PATTERNS.date.specificDate);
   if (specificDateMatch) {
     const month = parseInt(specificDateMatch[1]);
     const day = parseInt(specificDateMatch[2]);
     const year = today.getFullYear();
     date = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+  }
+
+  const relativeDaysMatch = text.match(TIME_PATTERNS.date.relativeDays);
+  if (relativeDaysMatch) {
+    const days = parseChineseNumber(relativeDaysMatch[1]);
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() + days);
+    date = targetDate.toISOString().split('T')[0];
+  }
+
+  const relativeWeeksMatch = text.match(TIME_PATTERNS.date.relativeWeeks);
+  if (relativeWeeksMatch) {
+    const weeks = parseChineseNumber(relativeWeeksMatch[1]);
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() + weeks * 7);
+    date = targetDate.toISOString().split('T')[0];
   }
 
   const hourMatch = text.match(TIME_PATTERNS.time.specificHour);
@@ -107,10 +169,35 @@ function extractTime(text: string): { date?: string; time?: string } {
       hour += 12;
     }
 
-    time = `${hour.toString().padStart(2, '0')}:00`;
+    const halfMatch = text.match(TIME_PATTERNS.time.halfHour);
+    const minute = halfMatch ? 30 : 0;
+    time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   }
 
-  return { date, time };
+  const relativeHoursMatch = text.match(TIME_PATTERNS.time.relativeHours);
+  if (relativeHoursMatch) {
+    const hours = parseChineseNumber(relativeHoursMatch[1]);
+    const targetTime = new Date(today);
+    targetTime.setHours(targetTime.getHours() + hours);
+    date = targetTime.toISOString().split('T')[0];
+    time = `${targetTime.getHours().toString().padStart(2, '0')}:${targetTime.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  const relativeMinutesMatch = text.match(TIME_PATTERNS.time.relativeMinutes);
+  if (relativeMinutesMatch) {
+    const minutes = parseChineseNumber(relativeMinutesMatch[1]);
+    const targetTime = new Date(today);
+    targetTime.setMinutes(targetTime.getMinutes() + minutes);
+    date = targetTime.toISOString().split('T')[0];
+    time = `${targetTime.getHours().toString().padStart(2, '0')}:${targetTime.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  const reminderMatch = text.match(/提醒(我)?(提前)?(\d+|[一二三四五六七八九十]+)分钟/);
+  if (reminderMatch) {
+    reminderMinutes = parseChineseNumber(reminderMatch[3]);
+  }
+
+  return { date, time, reminderMinutes };
 }
 
 function extractTitle(text: string, intent: string): string {
@@ -148,7 +235,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
   for (const [intent, patterns] of Object.entries(INTENT_PATTERNS)) {
     for (const pattern of patterns) {
       if (pattern.test(normalizedText)) {
-        const { date, time } = extractTime(normalizedText);
+        const { date, time, reminderMinutes } = extractTime(normalizedText);
         const title = extractTitle(text, intent);
         const location = extractLocation(normalizedText);
 
@@ -158,13 +245,14 @@ export function parseVoiceCommand(text: string): ParsedCommand {
           date,
           time,
           location,
+          reminderMinutes,
           rawText: text,
         };
       }
     }
   }
 
-  const { date, time } = extractTime(normalizedText);
+  const { date, time, reminderMinutes } = extractTime(normalizedText);
   if (date || time) {
     const title = extractTitle(text, 'create_event');
     return {
@@ -173,6 +261,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
       date,
       time,
       location: extractLocation(normalizedText),
+      reminderMinutes,
       rawText: text,
     };
   }

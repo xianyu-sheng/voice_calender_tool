@@ -153,7 +153,7 @@ function App() {
       start_time: startDate.toISOString(),
       end_time: endDate.toISOString(),
       location: command.location,
-      reminder_minutes: 15
+      reminder_minutes: command.reminderMinutes || 15
     };
 
     try {
