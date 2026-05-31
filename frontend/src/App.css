@@ -210,6 +210,30 @@ body {
   }
 }
 
+/* 录音中的指示器 */
+.listening-indicator {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background: #ff4d4f;
+  border-radius: 50%;
+  animation: listening-blink 1s ease-in-out infinite;
+}
+
+@keyframes listening-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateX(-50%) scale(0.8);
+  }
+}
+
 .voice-text {
   font-size: 13px;
   font-weight: 500;

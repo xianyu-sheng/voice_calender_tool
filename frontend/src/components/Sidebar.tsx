@@ -81,15 +81,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
               </svg>
               {isListening && (
-                <div className="voice-ripple-container">
-                  <span className="voice-ripple ripple-1"></span>
-                  <span className="voice-ripple ripple-2"></span>
-                  <span className="voice-ripple ripple-3"></span>
-                </div>
+                <>
+                  <div className="voice-ripple-container">
+                    <span className="voice-ripple ripple-1"></span>
+                    <span className="voice-ripple ripple-2"></span>
+                    <span className="voice-ripple ripple-3"></span>
+                  </div>
+                  <div className="listening-indicator"></div>
+                </>
               )}
             </div>
             <span className="voice-text">
-              {!isSupported ? '不支持语音' : isListening ? '再次点击结束' : '语音输入'}
+              {!isSupported ? '不支持语音' : isListening ? '🎤 识别中...' : '点击开始语音'}
             </span>
           </button>
         </div>
