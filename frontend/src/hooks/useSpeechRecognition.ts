@@ -40,7 +40,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     const recognition = new SpeechRecognition();
     
     recognition.lang = 'zh-CN';
-    recognition.continuous = false;
+    recognition.continuous = true;  // 支持连续录音，直到用户手动停止
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
@@ -108,7 +108,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   const startListening = useCallback(() => {
     if (!isSupported) {
-      setError('您的浏览器不支持语音识别功能');
+      setError('您的浏览器不支持语音识别功能，请使用 Chrome/Edge 浏览器');
       return;
     }
 
@@ -116,11 +116,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       setTranscript('');
       setInterimTranscript('');
       setError(null);
-      
+
       try {
         recognitionRef.current.start();
-      } catch (err) {
-        setError('启动语音识别失败');
+      } catch (err: any) {
+        console.error('Speech recognition start error:', err);
+        if (err.name === 'InvalidStateError') {
+          setError('语音识别已在运行中，请稍后再试');
+        } else {
+          setError(`启动语音识别失败: ${err.message || '未知错误'}`);
+        }
       }
     }
   }, [isSupported, isListening]);
