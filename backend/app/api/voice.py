@@ -1,9 +1,10 @@
+import os
 from flask import Blueprint, request, jsonify
 from ..services.llm_service import parse_with_llm, is_complex_command
 
 voice_bp = Blueprint('voice', __name__)
 
-API_KEY = ""
+API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 
 @voice_bp.route('/api/voice/config', methods=['POST'])
@@ -36,8 +37,10 @@ def parse_voice():
     text = data['text']
     use_llm = data.get('use_llm', True)
 
-    if use_llm and API_KEY and is_complex_command(text):
-        result = parse_with_llm(text, API_KEY)
+    effective_key = API_KEY or os.environ.get("DEEPSEEK_API_KEY", "")
+
+    if use_llm and effective_key and is_complex_command(text):
+        result = parse_with_llm(text, effective_key)
         if result:
             result['source'] = 'llm'
             return jsonify({'success': True, 'data': result})

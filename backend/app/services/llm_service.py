@@ -1,8 +1,11 @@
+import os
 import requests
 import json
 from typing import Optional
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
+load_dotenv()
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
@@ -35,12 +38,19 @@ SYSTEM_PROMPT = """你是一个日历助手，负责解析用户的语音指令�
 只返回JSON，不要其他文字。"""
 
 
+def get_api_key() -> str:
+    return os.environ.get("DEEPSEEK_API_KEY", "")
+
+
 def get_date_str(offset_days: int = 0) -> str:
     target = datetime.now() + timedelta(days=offset_days)
     return target.strftime("%Y-%m-%d")
 
 
-def parse_with_llm(text: str, api_key: str) -> Optional[dict]:
+def parse_with_llm(text: str, api_key: Optional[str] = None) -> Optional[dict]:
+    if api_key is None:
+        api_key = get_api_key()
+
     if not api_key:
         return None
 

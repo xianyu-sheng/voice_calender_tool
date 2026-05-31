@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"D:/语音版的日历工具\")",
+      "Bash(git add frontend/src/App.css frontend/src/App.tsx frontend/src/components/VoiceFeedback.tsx frontend/src/hooks/useSpeechSynthesis.ts)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: 实现语音合成功能\n\n- 创建useSpeechSynthesis Hook封装Web Speech Synthesis API\n- 集成语音播报到App组件，操作结果自动语音反馈\n- 更新VoiceFeedback组件显示播报状态\n- 添加语音播报CSS样式和动画\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ],
+    "deny": []
+  }
+}

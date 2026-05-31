@@ -81,7 +81,11 @@ venv\Scripts\activate  # Windows
 # source venv/bin/activate  # macOS/Linux
 
 # 安装依赖
-pip install flask flask-cors flask-sqlalchemy
+pip install -r requirements.txt
+
+# 配置 API Key（可选，用于大模型解析复杂语音指令）
+cp .env.example .env
+# 编辑 .env 文件，填入你的 DeepSeek API Key
 
 # 启动后端服务
 python main.py
@@ -266,6 +270,25 @@ voice_calender_tool/
 ---
 
 ## 🔧 配置说明
+
+### DeepSeek API 配置（可选）
+
+如需使用大模型解析复杂语音指令，需要配置 DeepSeek API Key：
+
+```bash
+# 1. 进入后端目录
+cd backend
+
+# 2. 复制环境变量模板
+cp .env.example .env
+
+# 3. 编辑 .env 文件，填入你的 API Key
+# DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> 💡 API Key 获取地址：[DeepSeek Platform](https://platform.deepseek.com)
+>
+> ⚠️ **注意**：`.env` 文件已在 `.gitignore` 中，不会被提交到 Git 仓库。
 
 ### 后端配置
 
