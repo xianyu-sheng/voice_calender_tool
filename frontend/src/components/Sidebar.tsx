@@ -47,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { icon: '📋', text: '查看任务', action: 'view_todos' },
     { icon: 'W', text: '查看本周', action: 'week' },
     { icon: 'M', text: '查看本月', action: 'month' },
+    { icon: '⚙', text: '语音设置', action: 'settings' },
   ];
 
   return (

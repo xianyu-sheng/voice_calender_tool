@@ -61,10 +61,18 @@ const MonthView: React.FC<MonthViewProps> = ({
 
   const handleDayClick = (date: Date, dayEvents: Event[], dayTodos: TodoItem[]) => {
     const dateKey = date.toDateString();
-    if (dayEvents.length > 0 || dayTodos.length > 0) {
-      setExpandedDate(expandedDate === dateKey ? null : dateKey);
+    const hasContent = dayEvents.length > 0 || dayTodos.length > 0;
+
+    if (expandedDate === dateKey) {
+      setExpandedDate(null);
+      return;
     }
-    onDateClick(date);
+
+    if (hasContent) {
+      setExpandedDate(dateKey);
+    } else {
+      onDateClick(date);
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -180,15 +188,27 @@ const MonthView: React.FC<MonthViewProps> = ({
                   </div>
                 </div>
               ))}
-              <button
-                className="add-todo-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDateClickForTodo(date);
-                }}
-              >
-                + 添加任务
-              </button>
+              <div className="expanded-actions">
+                <button
+                  className="add-todo-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDateClickForTodo(date);
+                  }}
+                >
+                  + 添加任务
+                </button>
+                <button
+                  className="view-day-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedDate(null);
+                    onDateClick(date);
+                  }}
+                >
+                  查看详情
+                </button>
+              </div>
             </div>
           )}
         </div>

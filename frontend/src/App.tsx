@@ -6,6 +6,7 @@ import WeekView from './components/WeekView'
 import DayView from './components/DayView'
 import EventModal from './components/EventModal'
 import TodoModal from './components/TodoModal'
+import SettingsModal from './components/SettingsModal'
 import VoiceFeedback from './components/VoiceFeedback'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
@@ -54,6 +55,8 @@ function App() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null);
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
 
   const {
     isListening,
@@ -150,8 +153,37 @@ function App() {
     }
   };
 
+  const parseWithHybrid = async (text: string): Promise<ParsedCommand> => {
+    if (apiKey) {
+      try {
+        const response = await fetch('http://localhost:8000/api/voice/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, use_llm: true })
+        });
+        const data = await response.json();
+        if (data.success && data.data.source === 'llm') {
+          const llmResult = data.data;
+          return {
+            intent: llmResult.intent || 'unknown',
+            title: llmResult.title,
+            date: llmResult.date,
+            time: llmResult.time,
+            location: llmResult.location,
+            priority: llmResult.priority,
+            reminderMinutes: llmResult.reminder_minutes,
+            rawText: text
+          };
+        }
+      } catch (error) {
+        console.error('LLM parse error:', error);
+      }
+    }
+    return parseVoiceCommand(text);
+  };
+
   const handleVoiceCommand = useCallback(async (text: string) => {
-    const command = parseVoiceCommand(text);
+    const command = await parseWithHybrid(text);
     console.log('Parsed command:', command);
 
     switch (command.intent) {
@@ -176,7 +208,7 @@ function App() {
 
     setTimeout(() => setVoiceFeedback(null), 3000);
     resetTranscript();
-  }, []);
+  }, [apiKey]);
 
   const handleVoiceCreateEvent = async (command: ParsedCommand) => {
     const now = new Date();
@@ -371,6 +403,20 @@ function App() {
     }
   };
 
+  const handleSaveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('deepseek_api_key', key);
+    if (key) {
+      fetch('http://localhost:8000/api/voice/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key })
+      });
+    }
+    setVoiceFeedback('语音设置已保存');
+    setTimeout(() => setVoiceFeedback(null), 2000);
+  };
+
   const handleQuickAction = (action: string) => {
     switch (action) {
       case 'create':
@@ -398,6 +444,9 @@ function App() {
       case 'month':
         handleToday();
         setView('month');
+        break;
+      case 'settings':
+        setSettingsOpen(true);
         break;
     }
   };
@@ -631,6 +680,13 @@ function App() {
         onSave={handleSaveTodo}
         onDelete={handleDeleteTodo}
         selectedDate={selectedDate}
+      />
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleSaveApiKey}
+        currentApiKey={apiKey}
       />
     </div>
   );
