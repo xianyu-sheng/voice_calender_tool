@@ -31,6 +31,20 @@ interface DayViewProps {
   onAddTodo: () => void;
 }
 
+// 将日期格式化为本地 YYYY-MM-DD，避免时区问题
+const toLocalDateStr = (d: Date): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// 从 ISO 字符串解析出本地日期字符串
+const parseToLocalDateStr = (isoStr: string): string => {
+  const d = new Date(isoStr);
+  return toLocalDateStr(d);
+};
+
 const DayView: React.FC<DayViewProps> = ({
   currentDate,
   events,
@@ -55,20 +69,20 @@ const DayView: React.FC<DayViewProps> = ({
     return event.color || '#1890ff';
   };
 
-  const hours = Array.from({ length: 24 }, (_, i) => i);
   const today = new Date();
   const isToday = currentDate.toDateString() === today.toDateString();
+  const currentDateStr = toLocalDateStr(currentDate);
 
   const completedTodos = todos.filter(t => t.completed).length;
   const todoProgress = todos.length > 0
     ? Math.round(todos.reduce((sum, t) => sum + t.progress, 0) / todos.length)
     : 0;
 
-  // Filter events for current date and sort by start_time (creation order)
+  // 用本地日期字符串过滤事件，避免时区偏差
   const dayEvents = events
     .filter(event => {
-      const eventDate = new Date(event.start_time);
-      return eventDate.toDateString() === currentDate.toDateString();
+      const eventDateStr = parseToLocalDateStr(event.start_time);
+      return eventDateStr === currentDateStr;
     })
     .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
@@ -77,22 +91,24 @@ const DayView: React.FC<DayViewProps> = ({
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
   };
 
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
   return (
     <div className="day-view">
       <div className="day-header">
-        <div className="time-gutter-header"></div>
-        <div className={`day-column-header ${isToday ? 'today' : ''}`}>
-          <span className="day-name">{isToday ? '今天' : `${currentDate.getMonth() + 1}月${currentDate.getDate()}日`}</span>
-          <span className={`day-date ${isToday ? 'today-date' : ''}`}>
-            {currentDate.getDate()}
+        <div className={`day-header-info ${isToday ? 'today' : ''}`}>
+          <span className="day-header-label">{isToday ? '今天' : `${currentDate.getMonth() + 1}月${currentDate.getDate()}日`}</span>
+          <span className={`day-header-date ${isToday ? 'today-date' : ''}`}>
+            {currentDate.getMonth() + 1}月{currentDate.getDate()}日 · {['周日','周一','周二','周三','周四','周五','周六'][currentDate.getDay()]}
           </span>
         </div>
       </div>
 
       <div className="day-content">
-        <div className="day-todos-panel">
-          <div className="todos-header">
-            <h3>今日任务</h3>
+        {/* 左侧：今日任务 */}
+        <div className="day-panel day-todos-panel">
+          <div className="panel-header">
+            <h3>📋 今日任务</h3>
             <button className="btn-add-todo" onClick={onAddTodo}>+</button>
           </div>
 
@@ -111,58 +127,60 @@ const DayView: React.FC<DayViewProps> = ({
             </div>
           )}
 
-          <div className="todos-list">
-            {todos.map(todo => (
-              <div key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
-                <div className="todo-main">
-                  <input
-                    type="checkbox"
-                    checked={todo.completed}
-                    onChange={() => onTodoToggle(todo.id)}
-                    className="todo-checkbox"
-                  />
-                  <span className="todo-title">{todo.title}</span>
-                  <span
-                    className="priority-badge"
-                    style={{ backgroundColor: getPriorityColor(todo.priority) }}
-                  >
-                    {todo.priority === 'high' ? '高' : todo.priority === 'medium' ? '中' : '低'}
-                  </span>
+          <div className="panel-body">
+            <div className="todos-list">
+              {todos.map(todo => (
+                <div key={todo.id} className={`todo-item ${todo.completed ? 'completed' : ''}`}>
+                  <div className="todo-main">
+                    <input
+                      type="checkbox"
+                      checked={todo.completed}
+                      onChange={() => onTodoToggle(todo.id)}
+                      className="todo-checkbox"
+                    />
+                    <span className="todo-title">{todo.title}</span>
+                    <span
+                      className="priority-badge"
+                      style={{ backgroundColor: getPriorityColor(todo.priority) }}
+                    >
+                      {todo.priority === 'high' ? '高' : todo.priority === 'medium' ? '中' : '低'}
+                    </span>
+                  </div>
+                  <div className="todo-progress">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={todo.progress}
+                      onChange={(e) => onTodoProgressUpdate(todo.id, parseInt(e.target.value))}
+                      className="progress-slider"
+                      style={{
+                        background: `linear-gradient(to right, ${getPriorityColor(todo.priority)} ${todo.progress}%, #e8e8e8 ${todo.progress}%)`
+                      }}
+                    />
+                    <span className="progress-text">{todo.progress}%</span>
+                  </div>
                 </div>
-                <div className="todo-progress">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={todo.progress}
-                    onChange={(e) => onTodoProgressUpdate(todo.id, parseInt(e.target.value))}
-                    className="progress-slider"
-                    style={{
-                      background: `linear-gradient(to right, ${getPriorityColor(todo.priority)} ${todo.progress}%, #e8e8e8 ${todo.progress}%)`
-                    }}
-                  />
-                  <span className="progress-text">{todo.progress}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {todos.length === 0 && (
-            <div className="empty-todos">
-              <p>暂无任务</p>
-              <button className="btn-add-todo-text" onClick={onAddTodo}>添加任务</button>
+              ))}
             </div>
-          )}
+
+            {todos.length === 0 && (
+              <div className="empty-state">
+                <p>暂无任务</p>
+                <button className="btn-add-todo-text" onClick={onAddTodo}>+ 添加任务</button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="day-timeline">
-          {/* Events List Section */}
-          <div className="events-section">
-            <div className="events-section-header">
-              <h3>今日事件</h3>
-              <span className="events-count">{dayEvents.length} 个事件</span>
-            </div>
+        {/* 右侧：今日事件 */}
+        <div className="day-panel day-events-panel">
+          <div className="panel-header">
+            <h3>📅 今日事件</h3>
+            <span className="events-count">{dayEvents.length} 个</span>
+          </div>
 
+          <div className="panel-body">
             {dayEvents.length > 0 ? (
               <div className="events-list">
                 {dayEvents.map(event => (
@@ -206,60 +224,48 @@ const DayView: React.FC<DayViewProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="empty-events">
+              <div className="empty-state">
                 <p>暂无事件</p>
-                <p className="empty-events-hint">点击下方时间轴创建新事件</p>
+                <p className="empty-hint">在时间轴上点击创建新事件</p>
               </div>
             )}
-          </div>
 
-          {/* Timeline Section */}
-          <div className="timeline-section">
-            <div className="timeline-section-header">
-              <h3>时间轴</h3>
-            </div>
-            <div className="timeline-grid">
-              <div className="time-gutter">
-                {hours.map(hour => (
-                  <div key={hour} className="time-slot">
-                    <span className="time-label">
-                      {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="day-column">
-                {hours.map(hour => (
+            {/* 时间轴 - 紧凑版，用于点击创建事件 */}
+            <div className="mini-timeline">
+              <div className="mini-timeline-header">时间轴 · 点击空白处创建事件</div>
+              <div className="mini-timeline-grid">
+                {hours.filter(h => h >= 6 && h <= 23).map(hour => (
                   <div
                     key={hour}
-                    className="day-cell"
+                    className="mini-time-slot"
                     onClick={() => {
                       const clickDate = new Date(currentDate);
                       clickDate.setHours(hour, 0, 0, 0);
                       onTimeClick(clickDate);
                     }}
                   >
-                    {dayEvents
-                      .filter(event => {
-                        const eventStart = new Date(event.start_time);
-                        const eventEnd = new Date(event.end_time);
-                        return hour >= eventStart.getHours() && hour < eventEnd.getHours();
-                      })
-                      .map(event => (
-                        <div
-                          key={event.id}
-                          className="day-event-marker"
-                          style={{ backgroundColor: getEventColor(event) }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEventClick(event);
-                          }}
-                        >
-                          <span className="day-event-marker-title">{event.title}</span>
-                        </div>
-                      ))
-                    }
+                    <span className="mini-time-label">
+                      {hour === 0 ? '12AM' : hour < 12 ? `${hour}AM` : hour === 12 ? '12PM' : `${hour-12}PM`}
+                    </span>
+                    <span className="mini-time-line">
+                      {dayEvents
+                        .filter(ev => {
+                          const s = new Date(ev.start_time);
+                          const e = new Date(ev.end_time);
+                          return hour >= s.getHours() && hour < e.getHours();
+                        })
+                        .map(ev => (
+                          <span
+                            key={ev.id}
+                            className="mini-event-tag"
+                            style={{ backgroundColor: getEventColor(ev) }}
+                            onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}
+                          >
+                            {ev.title}
+                          </span>
+                        ))
+                      }
+                    </span>
                   </div>
                 ))}
               </div>
