@@ -20,7 +20,11 @@ from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp
 app = Flask(__name__, static_folder=os.path.join(base_path, 'frontend', 'dist'))
 CORS(app)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///calendar.db'
+# 使用绝对路径确保数据库始终在同一位置
+db_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])) if getattr(sys, 'frozen', False) else base_path, 'instance')
+os.makedirs(db_dir, exist_ok=True)
+db_path = os.path.join(db_dir, 'calendar.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -35,18 +39,18 @@ with app.app_context():
     db.create_all()
     # 确保 events 表有 progress 列
     try:
-        import sqlite3
-        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(events)")
-        columns = [col[1] for col in cursor.fetchall()]
+        from sqlalchemy import text
+        result = db.session.execute(text("PRAGMA table_info(events)"))
+        columns = [row[1] for row in result]
         if 'progress' not in columns:
-            cursor.execute("ALTER TABLE events ADD COLUMN progress INTEGER DEFAULT 0")
-            conn.commit()
-        conn.close()
+            db.session.execute(text("ALTER TABLE events ADD COLUMN progress INTEGER DEFAULT 0"))
+            db.session.commit()
+            print("Migration: added progress column to events table")
+        else:
+            print("Migration: progress column already exists")
     except Exception as e:
         print(f"Migration check: {e}")
+        db.session.rollback()
 
 @app.route('/')
 def serve_frontend():

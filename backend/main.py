@@ -25,18 +25,18 @@ with app.app_context():
     db.create_all()
     # 确保 events 表有 progress 列
     try:
-        import sqlite3
-        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(events)")
-        columns = [col[1] for col in cursor.fetchall()]
+        from sqlalchemy import text
+        result = db.session.execute(text("PRAGMA table_info(events)"))
+        columns = [row[1] for row in result]
         if 'progress' not in columns:
-            cursor.execute("ALTER TABLE events ADD COLUMN progress INTEGER DEFAULT 0")
-            conn.commit()
-        conn.close()
+            db.session.execute(text("ALTER TABLE events ADD COLUMN progress INTEGER DEFAULT 0"))
+            db.session.commit()
+            print("Migration: added progress column to events table")
+        else:
+            print("Migration: progress column already exists")
     except Exception as e:
         print(f"Migration check: {e}")
+        db.session.rollback()
 
 @app.route('/')
 def root():

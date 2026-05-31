@@ -30,7 +30,7 @@ class Event(db.Model):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'location': self.location,
             'is_all_day': self.is_all_day,
-            'progress': self.progress,
+            'progress': getattr(self, 'progress', 0),
             'reminder_minutes': self.reminder_minutes,
             'recurrence_rule': self.recurrence_rule,
             'calendar_id': self.calendar_id,
