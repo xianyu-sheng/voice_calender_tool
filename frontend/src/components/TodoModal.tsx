@@ -40,7 +40,10 @@ const TodoModal: React.FC<TodoModalProps> = ({
       setAutoPostpone(todo.auto_postpone);
     } else if (selectedDate) {
       setTitle('');
-      setDate(selectedDate.toISOString().split('T')[0]);
+      const y = selectedDate.getFullYear();
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const d = String(selectedDate.getDate()).padStart(2, '0');
+      setDate(`${y}-${m}-${d}`);
       setPriority('medium');
       setAutoPostpone(true);
     }

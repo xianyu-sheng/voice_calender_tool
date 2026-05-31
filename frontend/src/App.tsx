@@ -316,7 +316,8 @@ function App() {
   };
 
   const handleVoiceCreateTodo = async (command: ParsedCommand) => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const todoData = {
       title: command.title || '新任务',
       date: command.date || today,
@@ -661,7 +662,10 @@ function App() {
   });
 
   const getTodosForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     return todos.filter(todo => todo.date === dateStr);
   };
 
