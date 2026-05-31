@@ -54,6 +54,14 @@ def delete_event(event_id):
     db.session.commit()
     return True
 
+def update_event_progress(event_id, progress):
+    event = Event.query.get(event_id)
+    if not event:
+        return None
+    event.progress = progress
+    db.session.commit()
+    return event
+
 def create_calendar(name, color='#1890ff', is_default=False):
     calendar = Calendar(name=name, color=color, is_default=is_default)
     db.session.add(calendar)

@@ -848,7 +848,179 @@ body {
 .day-timeline {
   flex: 1;
   display: flex;
+  flex-direction: column;
   overflow-y: auto;
+}
+
+/* Events Section */
+.events-section {
+  padding: 16px;
+  border-bottom: 2px solid #e8e8e8;
+  background: #fafafa;
+}
+
+.events-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.events-section-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f1f1f;
+  margin: 0;
+}
+
+.events-count {
+  font-size: 12px;
+  color: #8c8c8c;
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-card {
+  background: white;
+  border-radius: 10px;
+  padding: 12px 14px;
+  border-left: 4px solid #1890ff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.event-card:hover {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.event-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.event-card-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.event-time-icon {
+  font-size: 12px;
+}
+
+.event-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.event-card-body {
+  margin-bottom: 10px;
+}
+
+.event-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f1f1f;
+  margin: 0 0 4px 0;
+}
+
+.event-card-location {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.event-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f5f5f5;
+}
+
+.event-card-progress .progress-slider {
+  flex: 1;
+  height: 5px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.event-card-progress .progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #1890ff;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.event-card-progress .progress-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1890ff;
+  min-width: 36px;
+  text-align: right;
+}
+
+.empty-events {
+  text-align: center;
+  padding: 24px 16px;
+  color: #bfbfbf;
+}
+
+.empty-events p {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+}
+
+.empty-events-hint {
+  font-size: 12px;
+  color: #d9d9d9;
+}
+
+/* Timeline Section */
+.timeline-section {
+  flex: 1;
+  padding: 0 16px 16px 16px;
+}
+
+.timeline-section-header {
+  padding: 12px 0;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 2;
+}
+
+.timeline-section-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f1f1f;
+  margin: 0;
+}
+
+.timeline-grid {
+  display: flex;
 }
 
 .time-gutter {
@@ -880,40 +1052,27 @@ body {
   position: relative;
 }
 
-.day-event {
+.day-event-marker {
   position: absolute;
-  left: 4px;
-  right: 4px;
-  padding: 8px;
-  border-radius: 6px;
+  left: 2px;
+  right: 2px;
+  padding: 3px 6px;
+  border-radius: 4px;
   color: white;
   cursor: pointer;
   z-index: 1;
+  overflow: hidden;
+  top: 2px;
+  min-height: 20px;
 }
 
-.event-header {
-  margin-bottom: 4px;
-}
-
-.event-time {
+.day-event-marker-title {
   font-size: 11px;
-  opacity: 0.9;
-}
-
-.event-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.event-title {
-  font-size: 13px;
   font-weight: 500;
-}
-
-.event-location {
-  font-size: 11px;
-  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 /* Week View */
@@ -1143,6 +1302,42 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+
+.event-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.event-progress-row .progress-slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.event-progress-row .progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #1890ff;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.event-progress-row .progress-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1890ff;
+  min-width: 40px;
+  text-align: right;
 }
 
 .form-actions {

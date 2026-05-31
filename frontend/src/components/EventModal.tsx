@@ -8,6 +8,7 @@ interface EventData {
   end_time: string;
   location?: string;
   reminder_minutes?: number;
+  progress?: number;
 }
 
 interface EventModalProps {
@@ -33,7 +34,8 @@ const EventModal: React.FC<EventModalProps> = ({
     start_time: '',
     end_time: '',
     location: '',
-    reminder_minutes: 15
+    reminder_minutes: 15,
+    progress: 0
   });
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,7 +56,8 @@ const EventModal: React.FC<EventModalProps> = ({
         start_time: startTime.toISOString().slice(0, 16),
         end_time: endTime.toISOString().slice(0, 16),
         location: '',
-        reminder_minutes: 15
+        reminder_minutes: 15,
+        progress: 0
       });
     }
     setErrors({});
@@ -206,6 +209,25 @@ const EventModal: React.FC<EventModalProps> = ({
               <option value={30}>30分钟前</option>
               <option value={60}>1小时前</option>
             </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="progress">进度</label>
+            <div className="event-progress-row">
+              <input
+                type="range"
+                id="progress"
+                min="0"
+                max="100"
+                value={formData.progress || 0}
+                onChange={e => setFormData({ ...formData, progress: parseInt(e.target.value) })}
+                className="progress-slider"
+                style={{
+                  background: `linear-gradient(to right, #1890ff ${formData.progress || 0}%, #e8e8e8 ${formData.progress || 0}%)`
+                }}
+              />
+              <span className="progress-value">{formData.progress || 0}%</span>
+            </div>
           </div>
 
           <div className="form-actions">

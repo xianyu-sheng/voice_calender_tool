@@ -25,6 +25,7 @@ interface CalendarEvent {
   location?: string;
   color?: string;
   reminder_minutes?: number;
+  progress?: number;
 }
 
 interface TodoItem {
@@ -506,7 +507,7 @@ function App() {
     }
   };
 
-  const handleSaveEvent = async (event: { id?: number; title: string; start_time: string; end_time: string; description?: string; location?: string; reminder_minutes?: number }) => {
+  const handleSaveEvent = async (event: { id?: number; title: string; start_time: string; end_time: string; description?: string; location?: string; reminder_minutes?: number; progress?: number }) => {
     try {
       const method = event.id ? 'PUT' : 'POST';
       const url = event.id
@@ -522,10 +523,17 @@ function App() {
       const data = await response.json();
       if (data.success) {
         setModalOpen(false);
+        setSelectedEvent(null);
         fetchEvents();
+      } else {
+        console.error('Save failed:', data.error);
+        setVoiceFeedback(`保存失败: ${data.error || '请重试'}`);
+        setTimeout(() => setVoiceFeedback(null), 3000);
       }
     } catch (error) {
       console.error('Error saving event:', error);
+      setVoiceFeedback('保存失败，请检查网络连接');
+      setTimeout(() => setVoiceFeedback(null), 3000);
     }
   };
 
@@ -574,6 +582,23 @@ function App() {
       }
     } catch (error) {
       console.error('Error updating todo progress:', error);
+    }
+  };
+
+  const handleUpdateEventProgress = async (id: number, progress: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/events/${id}/progress`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progress })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchEvents();
+      }
+    } catch (error) {
+      console.error('Error updating event progress:', error);
     }
   };
 
@@ -696,6 +721,7 @@ function App() {
                 onEventClick={handleEventClick}
                 onTodoToggle={handleToggleTodo}
                 onTodoProgressUpdate={handleUpdateTodoProgress}
+                onEventProgressUpdate={handleUpdateEventProgress}
                 onAddTodo={() => handleDateClickForTodo(currentDate)}
               />
             )}

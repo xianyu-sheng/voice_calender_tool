@@ -13,6 +13,7 @@ class Event(db.Model):
     is_all_day = db.Column(db.Boolean, default=False)
     reminder_minutes = db.Column(db.Integer, default=15)
     recurrence_rule = db.Column(db.String(100), nullable=True)
+    progress = db.Column(db.Integer, default=0)
     calendar_id = db.Column(db.Integer, db.ForeignKey('calendars.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -29,6 +30,7 @@ class Event(db.Model):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'location': self.location,
             'is_all_day': self.is_all_day,
+            'progress': self.progress,
             'reminder_minutes': self.reminder_minutes,
             'recurrence_rule': self.recurrence_rule,
             'calendar_id': self.calendar_id,

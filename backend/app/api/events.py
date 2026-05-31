@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
-from ..utils import create_event, get_event, get_events, update_event, delete_event
+from ..utils import create_event, get_event, get_events, update_event, delete_event, update_event_progress
 
 events_bp = Blueprint('events', __name__)
 
@@ -70,6 +70,22 @@ def delete(event_id):
     if delete_event(event_id):
         return jsonify({'success': True, 'message': '事件已删除'})
     return jsonify({'success': False, 'error': '事件不存在'}), 404
+
+@events_bp.route('/api/events/<int:event_id>/progress', methods=['PUT'])
+def update_progress(event_id):
+    data = request.get_json()
+    if not data or 'progress' not in data:
+        return jsonify({'success': False, 'error': '缺少progress参数'}), 400
+
+    progress = data['progress']
+    if not isinstance(progress, int) or progress < 0 or progress > 100:
+        return jsonify({'success': False, 'error': 'progress必须是0-100的整数'}), 400
+
+    event = update_event_progress(event_id, progress)
+    if not event:
+        return jsonify({'success': False, 'error': '事件不存在'}), 404
+
+    return jsonify({'success': True, 'data': event.to_dict()})
 
 @events_bp.route('/api/events/range', methods=['GET'])
 def get_by_range():

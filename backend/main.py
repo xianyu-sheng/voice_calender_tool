@@ -23,6 +23,20 @@ app.register_blueprint(voice_bp)
 
 with app.app_context():
     db.create_all()
+    # 确保 events 表有 progress 列
+    try:
+        import sqlite3
+        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(events)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'progress' not in columns:
+            cursor.execute("ALTER TABLE events ADD COLUMN progress INTEGER DEFAULT 0")
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Migration check: {e}")
 
 @app.route('/')
 def root():
