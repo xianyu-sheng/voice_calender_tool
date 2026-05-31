@@ -1,6 +1,10 @@
 import React from 'react';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  onDateDoubleClick?: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onDateDoubleClick }) => {
   return (
     <header className="header">
       <div className="header-left">
@@ -13,7 +17,13 @@ const Header: React.FC = () => {
         <span className="header-subtitle">智能日程管理</span>
       </div>
       <div className="header-right">
-        <span className="header-date">{new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+        <span
+          className="header-date clickable"
+          onDoubleClick={onDateDoubleClick}
+          title="双击返回月视图"
+        >
+          {new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </span>
       </div>
     </header>
   );

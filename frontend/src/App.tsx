@@ -584,7 +584,7 @@ function App() {
 
   return (
     <div className="app">
-      <Header />
+      <Header onDateDoubleClick={() => { setView('month'); setCurrentDate(new Date()); }} />
 
       <div className="app-body">
         <Sidebar
