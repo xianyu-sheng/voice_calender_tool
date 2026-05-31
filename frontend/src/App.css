@@ -211,16 +211,17 @@ body {
 }
 
 /* 录音中的指示器 */
-.listening-indicator {
+.listening-dot {
   position: absolute;
   bottom: -4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 8px;
-  height: 8px;
-  background: #ff4d4f;
+  width: 10px;
+  height: 10px;
+  background: #fff;
   border-radius: 50%;
-  animation: listening-blink 1s ease-in-out infinite;
+  animation: listening-blink 0.8s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(255, 77, 79, 0.8);
 }
 
 @keyframes listening-blink {
@@ -229,8 +230,40 @@ body {
     transform: translateX(-50%) scale(1);
   }
   50% {
-    opacity: 0.5;
-    transform: translateX(-50%) scale(0.8);
+    opacity: 0.6;
+    transform: translateX(-50%) scale(0.7);
+  }
+}
+
+/* 脉冲动画 */
+.pulse-animation {
+  animation: pulse-btn 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-btn {
+  0%, 100% {
+    transform: scale(1.05);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* 语音提示文字 */
+.voice-hint {
+  display: block;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 2px;
+  animation: fade-in-out 2s ease-in-out infinite;
+}
+
+@keyframes fade-in-out {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
   }
 }
 

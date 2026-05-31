@@ -71,9 +71,18 @@ const Sidebar: React.FC<SidebarProps> = ({
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-section voice-section">
           <button
-            className={`btn-voice-sidebar ${isListening ? 'listening' : ''} ${!isSupported ? 'disabled' : ''}`}
+            className={`btn-voice-sidebar ${isListening ? 'listening pulse-animation' : ''} ${!isSupported ? 'disabled' : ''}`}
             onClick={onVoiceToggle}
             disabled={!isSupported}
+            style={{
+              background: isListening
+                ? 'linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)'
+                : 'linear-gradient(135deg, #722ed1 0%, #9254de 100%)',
+              transform: isListening ? 'scale(1.05)' : 'scale(1)',
+              boxShadow: isListening
+                ? '0 4px 20px rgba(255, 77, 79, 0.5)'
+                : '0 2px 8px rgba(114, 46, 209, 0.3)'
+            }}
           >
             <div className="voice-icon-wrapper">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
@@ -87,13 +96,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <span className="voice-ripple ripple-2"></span>
                     <span className="voice-ripple ripple-3"></span>
                   </div>
-                  <div className="listening-indicator"></div>
+                  <div className="listening-dot"></div>
                 </>
               )}
             </div>
-            <span className="voice-text">
-              {!isSupported ? '不支持语音' : isListening ? '🎤 识别中...' : '点击开始语音'}
+            <span className="voice-text" style={{ fontWeight: isListening ? '700' : '500' }}>
+              {!isSupported ? '❌ 不支持语音' : isListening ? '🔴 请说话...' : '🎤 点击开始语音'}
             </span>
+            {isListening && (
+              <span className="voice-hint">再次点击结束</span>
+            )}
           </button>
         </div>
 

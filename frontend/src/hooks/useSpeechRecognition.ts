@@ -27,10 +27,27 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
-  const isStartingRef = useRef(false);  // 防止重复启动
+  const isStartingRef = useRef(false);
+  const hasPermissionRef = useRef(false);
 
   const isSupported = typeof window !== 'undefined' &&
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+  // 检查麦克风权限
+  const checkMicrophonePermission = useCallback(async () => {
+    try {
+      console.log('Checking microphone permission...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✓ Microphone permission granted');
+      stream.getTracks().forEach(track => track.stop());
+      hasPermissionRef.current = true;
+      return true;
+    } catch (err) {
+      console.error('✗ Microphone permission denied:', err);
+      hasPermissionRef.current = false;
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     if (!isSupported) {
@@ -45,19 +62,19 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     const recognition = new SpeechRecognition();
 
     recognition.lang = 'zh-CN';
-    recognition.continuous = false;  // 单次识别
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
-      console.log('✓ Speech recognition started');
+      console.log('✓ Speech recognition onstart fired');
       setIsListening(true);
       isStartingRef.current = false;
       setError(null);
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      console.log('Speech recognition result:', event);
+      console.log('✓ Speech recognition onresult fired:', event);
       let interim = '';
       let final = '';
 
@@ -76,11 +93,12 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         setInterimTranscript('');
       } else {
         setInterimTranscript(interim);
+        console.log('Interim transcript:', interim);
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('✗ Speech recognition error:', event.error);
+      console.error('✗ Speech recognition onerror:', event.error, event);
       setIsListening(false);
       isStartingRef.current = false;
 
@@ -98,7 +116,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           setError('网络错误，请检查网络连接');
           break;
         case 'aborted':
-          // 用户主动取消，不显示错误
           break;
         default:
           setError(`语音识别错误: ${event.error}`);
@@ -106,14 +123,17 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     };
 
     recognition.onend = () => {
-      console.log('✓ Speech recognition ended');
+      console.log('✓ Speech recognition onend fired');
       setIsListening(false);
       isStartingRef.current = false;
       setInterimTranscript('');
     };
 
     recognitionRef.current = recognition;
-    console.log('✓ Speech recognition initialized');
+    console.log('✓ Speech recognition object created');
+
+    // 预检查麦克风权限
+    checkMicrophonePermission();
 
     return () => {
       if (recognitionRef.current) {
@@ -124,70 +144,81 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }
     };
-  }, [isSupported]);
+  }, [isSupported, checkMicrophonePermission]);
 
-  const startListening = useCallback(() => {
-    console.log('startListening called, isSupported:', isSupported, 'isStarting:', isStartingRef.current);
+  const startListening = useCallback(async () => {
+    console.log('=== startListening called ===');
+    console.log('isSupported:', isSupported);
+    console.log('isStarting:', isStartingRef.current);
+    console.log('recognition exists:', !!recognitionRef.current);
 
     if (!isSupported) {
       setError('您的浏览器不支持语音识别功能，请使用 Chrome/Edge 浏览器');
       return;
     }
 
-    // 防止重复启动
     if (isStartingRef.current) {
       console.log('Already starting, skipping...');
       return;
     }
 
+    // 检查麦克风权限
+    if (!hasPermissionRef.current) {
+      console.log('Need to check microphone permission first...');
+      const hasPermission = await checkMicrophonePermission();
+      if (!hasPermission) {
+        setError('需要麦克风权限才能使用语音识别');
+        return;
+      }
+    }
+
     if (recognitionRef.current) {
-      console.log('Starting speech recognition...');
+      console.log('Setting isStarting = true');
       isStartingRef.current = true;
       setTranscript('');
       setInterimTranscript('');
       setError(null);
 
       try {
+        console.log('Calling recognition.start()...');
         recognitionRef.current.start();
+        console.log('recognition.start() called successfully');
       } catch (err: any) {
-        console.error('Speech recognition start error:', err);
+        console.error('recognition.start() threw error:', err);
         isStartingRef.current = false;
 
         if (err.name === 'InvalidStateError') {
-          // 如果已经在运行，先停止再重启
-          console.log('Recognition already running, stopping first...');
+          console.log('InvalidStateError - trying to stop and restart...');
           try {
             recognitionRef.current.stop();
           } catch (stopErr) {
-            // ignore
+            console.error('stop() error:', stopErr);
           }
-          // 等待 onend 回调后再重启
           setTimeout(() => {
             try {
-              if (recognitionRef.current) {
-                isStartingRef.current = true;
-                recognitionRef.current.start();
-              }
+              console.log('Retrying start()...');
+              isStartingRef.current = true;
+              recognitionRef.current.start();
             } catch (retryErr: any) {
               console.error('Retry start failed:', retryErr);
               isStartingRef.current = false;
               setError(`启动语音识别失败: ${retryErr.message || '未知错误'}`);
             }
-          }, 200);
+          }, 300);
         } else {
           setError(`启动语音识别失败: ${err.message || '未知错误'}`);
         }
       }
     }
-  }, [isSupported]);
+  }, [isSupported, checkMicrophonePermission]);
 
   const stopListening = useCallback(() => {
-    console.log('stopListening called');
+    console.log('=== stopListening called ===');
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (err) {
-        // ignore
+        console.error('stop() error:', err);
       }
     }
   }, []);
