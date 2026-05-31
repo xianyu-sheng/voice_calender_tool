@@ -36,20 +36,29 @@ app.register_blueprint(todos_bp)
 app.register_blueprint(voice_bp)
 
 with app.app_context():
-    db.create_all()
-    # 确保 events 表有 progress 列
     try:
+        db.create_all()
+        print(f"DB path: {db_path}")
+        print(f"DB exists: {os.path.exists(db_path)}")
+        # 确保 events 表有 progress 列
         from sqlalchemy import text
         result = db.session.execute(text("PRAGMA table_info(events)"))
         columns = [row[1] for row in result]
+        print(f"Events columns: {columns}")
         if 'progress' not in columns:
             db.session.execute(text("ALTER TABLE events ADD COLUMN progress INTEGER DEFAULT 0"))
             db.session.commit()
-            print("Migration: added progress column to events table")
+            print("Migration: added progress column")
         else:
-            print("Migration: progress column already exists")
+            print("Migration: progress column exists")
+        # 测试查询
+        from app.models import Event
+        count = Event.query.count()
+        print(f"Events count: {count}")
     except Exception as e:
-        print(f"Migration check: {e}")
+        print(f"DB init error: {e}")
+        import traceback
+        traceback.print_exc()
         db.session.rollback()
 
 @app.route('/')
