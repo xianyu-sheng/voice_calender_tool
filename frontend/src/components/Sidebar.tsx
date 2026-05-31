@@ -14,6 +14,8 @@ interface SidebarProps {
   onVoiceToggle: () => void;
   isSupported: boolean;
   onQuickAction: (action: string) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -29,7 +31,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   isListening,
   onVoiceToggle,
   isSupported,
-  onQuickAction
+  onQuickAction,
+  isOpen = true,
+  onClose
 }) => {
   const monthNames = [
     '一月', '二月', '三月', '四月', '五月', '六月',
@@ -50,114 +54,128 @@ const Sidebar: React.FC<SidebarProps> = ({
     { icon: '⚙', text: '语音设置', action: 'settings' },
   ];
 
+  const handleAction = (action: string) => {
+    onQuickAction(action);
+    // Mobile: close sidebar after action
+    if (window.innerWidth <= 768 && onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar-section voice-section">
-        <button
-          className={`btn-voice-sidebar ${isListening ? 'listening' : ''} ${!isSupported ? 'disabled' : ''}`}
-          onClick={onVoiceToggle}
-          disabled={!isSupported}
-        >
-          <div className="voice-icon-wrapper">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-            {isListening && <span className="voice-pulse"></span>}
-          </div>
-          <span className="voice-text">
-            {!isSupported ? '不支持语音' : isListening ? '聆听中...' : '语音输入'}
-          </span>
-        </button>
-      </div>
-
-      <div className="sidebar-divider"></div>
-
-      <div className="sidebar-section nav-section">
-        <div className="month-nav">
-          <button className="btn-nav-sidebar" onClick={onPrev}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M10.354 4.354a.5.5 0 00-.708-.708l-4 4a.5.5 0 000 .708l4 4a.5.5 0 00.708-.708L6.707 8l3.647-3.646z"/>
-            </svg>
-          </button>
-          <span className="month-title">{formatMonth()}</span>
-          <button className="btn-nav-sidebar" onClick={onNext}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5.646 4.354a.5.5 0 01.708-.708l4 4a.5.5 0 010 .708l-4 4a.5.5 0 01-.708-.708L9.293 8 5.646 4.354z"/>
-            </svg>
+    <>
+      <div
+        className={`sidebar-overlay ${isOpen ? 'active' : ''}`}
+        onClick={onClose}
+      />
+      <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+        <div className="sidebar-section voice-section">
+          <button
+            className={`btn-voice-sidebar ${isListening ? 'listening' : ''} ${!isSupported ? 'disabled' : ''}`}
+            onClick={onVoiceToggle}
+            disabled={!isSupported}
+          >
+            <div className="voice-icon-wrapper">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+              {isListening && <span className="voice-pulse"></span>}
+            </div>
+            <span className="voice-text">
+              {!isSupported ? '不支持语音' : isListening ? '聆听中...' : '语音输入'}
+            </span>
           </button>
         </div>
-        <button className="btn-today-sidebar" onClick={onToday}>
-          今天
-        </button>
-      </div>
 
-      <div className="sidebar-divider"></div>
+        <div className="sidebar-divider"></div>
 
-      <div className="sidebar-section view-section">
-        <h3 className="section-title">视图</h3>
-        <div className="view-buttons">
-          <button
-            className={`btn-view-sidebar ${view === 'day' ? 'active' : ''}`}
-            onClick={() => onViewChange('day')}
-          >
-            日
-          </button>
-          <button
-            className={`btn-view-sidebar ${view === 'week' ? 'active' : ''}`}
-            onClick={() => onViewChange('week')}
-          >
-            周
-          </button>
-          <button
-            className={`btn-view-sidebar ${view === 'month' ? 'active' : ''}`}
-            onClick={() => onViewChange('month')}
-          >
-            月
-          </button>
-        </div>
-      </div>
-
-      <div className="sidebar-divider"></div>
-
-      <div className="sidebar-section commands-section">
-        <h3 className="section-title">快捷指令</h3>
-        <div className="quick-commands">
-          {quickCommands.map((cmd, index) => (
-            <button
-              key={index}
-              className="btn-quick-command"
-              onClick={() => onQuickAction(cmd.action)}
-            >
-              <span className="cmd-icon">{cmd.icon}</span>
-              <span className="cmd-text">{cmd.text}</span>
+        <div className="sidebar-section nav-section">
+          <div className="month-nav">
+            <button className="btn-nav-sidebar" onClick={onPrev}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M10.354 4.354a.5.5 0 00-.708-.708l-4 4a.5.5 0 000 .708l4 4a.5.5 0 00.708-.708L6.707 8l3.647-3.646z"/>
+              </svg>
             </button>
-          ))}
+            <span className="month-title">{formatMonth()}</span>
+            <button className="btn-nav-sidebar" onClick={onNext}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.646 4.354a.5.5 0 01.708-.708l4 4a.5.5 0 010 .708l-4 4a.5.5 0 01-.708-.708L9.293 8 5.646 4.354z"/>
+              </svg>
+            </button>
+          </div>
+          <button className="btn-today-sidebar" onClick={onToday}>
+            今天
+          </button>
         </div>
-      </div>
 
-      <div className="sidebar-divider"></div>
+        <div className="sidebar-divider"></div>
 
-      <div className="sidebar-section calendars-section">
-        <h3 className="section-title">日历</h3>
-        <div className="calendar-list">
-          {calendars.map(calendar => (
-            <label key={calendar.id} className="calendar-item">
-              <input
-                type="checkbox"
-                checked={activeCalendars.includes(calendar.id)}
-                onChange={() => onCalendarToggle(calendar.id)}
-              />
-              <span
-                className="calendar-color"
-                style={{ backgroundColor: calendar.color }}
-              ></span>
-              <span className="calendar-name">{calendar.name}</span>
-            </label>
-          ))}
+        <div className="sidebar-section view-section">
+          <h3 className="section-title">视图</h3>
+          <div className="view-buttons">
+            <button
+              className={`btn-view-sidebar ${view === 'day' ? 'active' : ''}`}
+              onClick={() => onViewChange('day')}
+            >
+              日
+            </button>
+            <button
+              className={`btn-view-sidebar ${view === 'week' ? 'active' : ''}`}
+              onClick={() => onViewChange('week')}
+            >
+              周
+            </button>
+            <button
+              className={`btn-view-sidebar ${view === 'month' ? 'active' : ''}`}
+              onClick={() => onViewChange('month')}
+            >
+              月
+            </button>
+          </div>
         </div>
-      </div>
-    </aside>
+
+        <div className="sidebar-divider"></div>
+
+        <div className="sidebar-section commands-section">
+          <h3 className="section-title">快捷指令</h3>
+          <div className="quick-commands">
+            {quickCommands.map((cmd, index) => (
+              <button
+                key={index}
+                className="btn-quick-command"
+                onClick={() => handleAction(cmd.action)}
+              >
+                <span className="cmd-icon">{cmd.icon}</span>
+                <span className="cmd-text">{cmd.text}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="sidebar-divider"></div>
+
+        <div className="sidebar-section calendars-section">
+          <h3 className="section-title">日历</h3>
+          <div className="calendar-list">
+            {calendars.map(calendar => (
+              <label key={calendar.id} className="calendar-item">
+                <input
+                  type="checkbox"
+                  checked={activeCalendars.includes(calendar.id)}
+                  onChange={() => onCalendarToggle(calendar.id)}
+                />
+                <span
+                  className="calendar-color"
+                  style={{ backgroundColor: calendar.color }}
+                ></span>
+                <span className="calendar-name">{calendar.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </aside>
+    </>
   );
 };
 

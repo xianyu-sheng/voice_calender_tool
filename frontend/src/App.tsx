@@ -57,6 +57,7 @@ function App() {
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const {
     isListening,
@@ -584,7 +585,10 @@ function App() {
 
   return (
     <div className="app">
-      <Header onDateDoubleClick={() => { setView('month'); setCurrentDate(new Date()); }} />
+      <Header
+        onDateDoubleClick={() => { setView('month'); setCurrentDate(new Date()); }}
+        onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
 
       <div className="app-body">
         <Sidebar
@@ -601,6 +605,8 @@ function App() {
           onVoiceToggle={handleVoiceToggle}
           isSupported={isSupported}
           onQuickAction={handleQuickAction}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
 
         <main className="main-content">
