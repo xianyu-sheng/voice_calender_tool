@@ -63,14 +63,19 @@ const MonthView: React.FC<MonthViewProps> = ({
     const dateKey = date.toDateString();
     const hasContent = dayEvents.length > 0 || dayTodos.length > 0;
 
+    console.log(`[MonthView] handleDayClick: date=${dateKey}, hasContent=${hasContent}, expandedDate=${expandedDate}, events=${dayEvents.length}, todos=${dayTodos.length}`);
+
     if (expandedDate === dateKey) {
+      console.log(`[MonthView] 收起展开: ${dateKey}`);
       setExpandedDate(null);
       return;
     }
 
     if (hasContent) {
+      console.log(`[MonthView] 展开日期: ${dateKey}`);
       setExpandedDate(dateKey);
     } else {
+      console.log(`[MonthView] 导航到日期: ${dateKey}`);
       onDateClick(date);
     }
   };
@@ -114,7 +119,7 @@ const MonthView: React.FC<MonthViewProps> = ({
         <div
           key={day}
           className={`calendar-day ${isToday ? 'today' : ''} ${isExpanded ? 'expanded' : ''} ${hasContent ? 'has-events' : ''}`}
-          onClick={() => handleDayClick(date, dayEvents, dayTodos)}
+          onClick={() => { console.log(`[MonthView] 单元格点击: day=${day}, date=${date.toDateString()}`); handleDayClick(date, dayEvents, dayTodos); }}
         >
           <div className="day-header">
             <span className={`day-number ${isToday ? 'today-number' : ''}`}>
@@ -202,6 +207,7 @@ const MonthView: React.FC<MonthViewProps> = ({
                   className="view-day-btn"
                   onClick={(e) => {
                     e.stopPropagation();
+                    console.log(`[MonthView] 查看详情点击: date=${date.toDateString()}, day=${date.getDate()}`);
                     setExpandedDate(null);
                     onDateClick(date);
                   }}
