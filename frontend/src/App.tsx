@@ -8,6 +8,7 @@ import EventModal from './components/EventModal'
 import TodoModal from './components/TodoModal'
 import SettingsModal from './components/SettingsModal'
 import VoiceFeedback from './components/VoiceFeedback'
+import VoiceLLMFeedback from './components/VoiceLLMFeedback'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
 import { useReminder } from './hooks/useReminder'
@@ -58,6 +59,13 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // LLM 可视化状态
+  const [llmStatus, setLlmStatus] = useState<'idle' | 'calling' | 'parsing' | 'result' | 'error'>('idle');
+  const [llmRawText, setLlmRawText] = useState<string>('');
+  const [llmResult, setLlmResult] = useState<any>(null);
+  const [llmError, setLlmError] = useState<string>('');
+  const [pendingCommand, setPendingCommand] = useState<ParsedCommand | null>(null);
 
   const {
     isListening,
@@ -156,7 +164,16 @@ function App() {
 
   const parseWithHybrid = async (text: string): Promise<ParsedCommand> => {
     if (apiKey) {
+      // 显示调用状态
+      setLlmStatus('calling');
+      setLlmRawText(text);
+      setLlmResult(null);
+      setLlmError('');
+
       try {
+        // 模拟解析过程延迟
+        setTimeout(() => setLlmStatus('parsing'), 800);
+
         const response = await fetch('http://localhost:8000/api/voice/parse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -164,20 +181,29 @@ function App() {
         });
         const data = await response.json();
         if (data.success && data.data.source === 'llm') {
-          const llmResult = data.data;
+          const result = data.data;
+          // 显示结果
+          setLlmResult(result);
+          setLlmStatus('result');
+
+          // 返回解析结果
           return {
-            intent: llmResult.intent || 'unknown',
-            title: llmResult.title,
-            date: llmResult.date,
-            time: llmResult.time,
-            location: llmResult.location,
-            priority: llmResult.priority,
-            reminderMinutes: llmResult.reminder_minutes,
+            intent: result.intent || 'unknown',
+            title: result.title,
+            date: result.date,
+            time: result.time,
+            end_time: result.end_time,
+            location: result.location,
+            description: result.description,
+            priority: result.priority,
+            reminderMinutes: result.reminder_minutes,
             rawText: text
           };
         }
       } catch (error) {
         console.error('LLM parse error:', error);
+        setLlmError('网络错误，请检查连接');
+        setLlmStatus('error');
       }
     }
     return parseVoiceCommand(text);
@@ -187,6 +213,17 @@ function App() {
     const command = await parseWithHybrid(text);
     console.log('Parsed command:', command);
 
+    // 如果是 LLM 结果，等待用户确认
+    if (llmStatus === 'result' && command.source === 'llm') {
+      setPendingCommand(command);
+      return; // 不立即执行，等待用户确认
+    }
+
+    // 正则解析的结果直接执行
+    executeCommand(command);
+  }, [apiKey, llmStatus]);
+
+  const executeCommand = async (command: ParsedCommand) => {
     switch (command.intent) {
       case 'create_event':
         await handleVoiceCreateEvent(command);
@@ -209,7 +246,24 @@ function App() {
 
     setTimeout(() => setVoiceFeedback(null), 3000);
     resetTranscript();
-  }, [apiKey]);
+  };
+
+  // 确认 LLM 结果
+  const handleLLMConfirm = async () => {
+    if (pendingCommand) {
+      setLlmStatus('idle');
+      await executeCommand(pendingCommand);
+      setPendingCommand(null);
+    }
+  };
+
+  // 取消 LLM 结果
+  const handleLLMCancel = () => {
+    setLlmStatus('idle');
+    setLlmResult(null);
+    setPendingCommand(null);
+    resetTranscript();
+  };
 
   const handleVoiceCreateEvent = async (command: ParsedCommand) => {
     const now = new Date();
@@ -668,6 +722,15 @@ function App() {
         feedback={voiceFeedback}
         error={speechError}
         isSpeaking={isSpeaking}
+      />
+
+      <VoiceLLMFeedback
+        status={llmStatus}
+        rawText={llmRawText}
+        result={llmResult}
+        error={llmError}
+        onConfirm={handleLLMConfirm}
+        onCancel={handleLLMCancel}
       />
 
       <EventModal

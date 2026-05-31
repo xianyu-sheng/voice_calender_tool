@@ -3,10 +3,13 @@ export interface ParsedCommand {
   title?: string;
   date?: string;
   time?: string;
+  end_time?: string;
   location?: string;
+  description?: string;
   reminderMinutes?: number;
   priority?: 'low' | 'medium' | 'high';
   rawText: string;
+  source?: string;
 }
 
 const INTENT_PATTERNS = {
