@@ -1,3 +1,5 @@
+import { toLocalDateStr } from './dateUtils';
+
 export interface ParsedCommand {
   intent: 'create_event' | 'delete_event' | 'view_events' | 'edit_event' | 'set_reminder' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'view_todos' | 'unknown';
   title?: string;
@@ -136,15 +138,15 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
   const today = new Date();
 
   if (TIME_PATTERNS.date.today.test(text)) {
-    date = today.toISOString().split('T')[0];
+    date = toLocalDateStr(today);
   } else if (TIME_PATTERNS.date.tomorrow.test(text)) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    date = tomorrow.toISOString().split('T')[0];
+    date = toLocalDateStr(tomorrow);
   } else if (TIME_PATTERNS.date.dayAfterTomorrow.test(text)) {
     const dayAfter = new Date(today);
     dayAfter.setDate(dayAfter.getDate() + 2);
-    date = dayAfter.toISOString().split('T')[0];
+    date = toLocalDateStr(dayAfter);
   }
 
   const nextWeekMatch = text.match(TIME_PATTERNS.date.nextWeek);
@@ -156,7 +158,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     const currentDay = nextWeek.getDay();
     const diff = targetDay - currentDay;
     nextWeek.setDate(nextWeek.getDate() + (diff >= 0 ? diff : diff + 7));
-    date = nextWeek.toISOString().split('T')[0];
+    date = toLocalDateStr(nextWeek);
   }
 
   const nextNextWeekMatch = text.match(TIME_PATTERNS.date.nextNextWeek);
@@ -168,7 +170,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     const currentDay = nextNextWeek.getDay();
     const diff = targetDay - currentDay;
     nextNextWeek.setDate(nextNextWeek.getDate() + (diff >= 0 ? diff : diff + 7));
-    date = nextNextWeek.toISOString().split('T')[0];
+    date = toLocalDateStr(nextNextWeek);
   }
 
   const specificDateMatch = text.match(TIME_PATTERNS.date.specificDate);
@@ -184,7 +186,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     const days = parseChineseNumber(relativeDaysMatch[1]);
     const targetDate = new Date(today);
     targetDate.setDate(targetDate.getDate() + days);
-    date = targetDate.toISOString().split('T')[0];
+    date = toLocalDateStr(targetDate);
   }
 
   const relativeWeeksMatch = text.match(TIME_PATTERNS.date.relativeWeeks);
@@ -192,7 +194,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     const weeks = parseChineseNumber(relativeWeeksMatch[1]);
     const targetDate = new Date(today);
     targetDate.setDate(targetDate.getDate() + weeks * 7);
-    date = targetDate.toISOString().split('T')[0];
+    date = toLocalDateStr(targetDate);
   }
 
   const hourMatch = text.match(TIME_PATTERNS.time.specificHour);
@@ -229,7 +231,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     const hours = parseChineseNumber(relativeHoursMatch[1]);
     const targetTime = new Date(today);
     targetTime.setHours(targetTime.getHours() + hours);
-    date = targetTime.toISOString().split('T')[0];
+    date = toLocalDateStr(targetTime);
     time = `${targetTime.getHours().toString().padStart(2, '0')}:${targetTime.getMinutes().toString().padStart(2, '0')}`;
   }
 
@@ -238,7 +240,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     const minutes = parseChineseNumber(relativeMinutesMatch[1]);
     const targetTime = new Date(today);
     targetTime.setMinutes(targetTime.getMinutes() + minutes);
-    date = targetTime.toISOString().split('T')[0];
+    date = toLocalDateStr(targetTime);
     time = `${targetTime.getHours().toString().padStart(2, '0')}:${targetTime.getMinutes().toString().padStart(2, '0')}`;
   }
 

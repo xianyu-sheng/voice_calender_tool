@@ -1,4 +1,5 @@
 import React from 'react';
+import { toLocalDateStr } from '../utils/dateUtils';
 
 interface LLMResult {
   intent: string;
@@ -62,8 +63,8 @@ const VoiceLLMFeedback: React.FC<VoiceLLMFeedbackProps> = ({
 
   const formatDate = (date?: string) => {
     if (!date) return '今天';
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const today = toLocalDateStr(new Date());
+    const tomorrow = toLocalDateStr(new Date(Date.now() + 86400000));
     if (date === today) return '今天';
     if (date === tomorrow) return '明天';
     const d = new Date(date);

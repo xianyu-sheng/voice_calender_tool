@@ -1,4 +1,5 @@
 import React from 'react';
+import { toLocalDateStr } from '../utils/dateUtils';
 
 interface Event {
   id: number;
@@ -31,21 +32,6 @@ interface DayViewProps {
   onAddTodo: () => void;
 }
 
-// 将日期格式化为本地 YYYY-MM-DD，避免时区问题
-const toLocalDateStr = (d: Date): string => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-// 从 ISO 字符串解析出本地日期字符串
-// 后端存储的是无时区的 naive datetime（如 "2025-05-31T10:00:00"）
-// new Date() 会将其视为本地时间解析，所以 getFullYear/getMonth/getDate 就是本地日期
-const parseToLocalDateStr = (isoStr: string): string => {
-  const d = new Date(isoStr);
-  return toLocalDateStr(d);
-};
 
 const DayView: React.FC<DayViewProps> = ({
   currentDate,
@@ -83,7 +69,7 @@ const DayView: React.FC<DayViewProps> = ({
   // 用本地日期字符串过滤事件，避免时区偏差
   const dayEvents = events
     .filter(event => {
-      const eventDateStr = parseToLocalDateStr(event.start_time);
+      const eventDateStr = toLocalDateStr(new Date(event.start_time));
       const match = eventDateStr === currentDateStr;
       // 调试日志：帮助排查日期过滤问题
       if (!match && events.length <= 20) {
@@ -99,7 +85,7 @@ const DayView: React.FC<DayViewProps> = ({
     console.log(`[DayView] 前3个事件:`, events.slice(0, 3).map(e => ({
       title: e.title,
       start_time: e.start_time,
-      localDate: parseToLocalDateStr(e.start_time)
+      localDate: toLocalDateStr(new Date(e.start_time))
     })));
   }
 

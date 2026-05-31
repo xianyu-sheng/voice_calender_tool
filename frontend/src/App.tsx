@@ -14,6 +14,7 @@ import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
 import { useReminder } from './hooks/useReminder'
 import { parseVoiceCommand } from './utils/voiceCommandParser'
 import type { ParsedCommand } from './utils/voiceCommandParser'
+import { toLocalDateStr, todayStr } from './utils/dateUtils'
 import './App.css'
 
 interface CalendarEvent {
@@ -316,8 +317,7 @@ function App() {
   };
 
   const handleVoiceCreateTodo = async (command: ParsedCommand) => {
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const today = todayStr();
     const todoData = {
       title: command.title || '新任务',
       date: command.date || today,
@@ -662,10 +662,7 @@ function App() {
   });
 
   const getTodosForDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${year}-${month}-${day}`;
+    const dateStr = toLocalDateStr(date);
     return todos.filter(todo => todo.date === dateStr);
   };
 

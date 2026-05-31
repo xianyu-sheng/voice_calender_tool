@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toLocalDateStr } from '../utils/dateUtils';
 
 interface TodoItem {
   id: number;
@@ -40,10 +41,7 @@ const TodoModal: React.FC<TodoModalProps> = ({
       setAutoPostpone(todo.auto_postpone);
     } else if (selectedDate) {
       setTitle('');
-      const y = selectedDate.getFullYear();
-      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const d = String(selectedDate.getDate()).padStart(2, '0');
-      setDate(`${y}-${m}-${d}`);
+      setDate(toLocalDateStr(selectedDate));
       setPriority('medium');
       setAutoPostpone(true);
     }
