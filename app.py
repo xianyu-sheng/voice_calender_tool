@@ -15,7 +15,7 @@ base_path = get_base_path()
 sys.path.insert(0, os.path.join(base_path, 'backend'))
 
 from app import db
-from app.api import events_bp, calendars_bp, reminders_bp
+from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp
 
 app = Flask(__name__, static_folder=os.path.join(base_path, 'frontend', 'dist'))
 CORS(app)
@@ -28,6 +28,8 @@ db.init_app(app)
 app.register_blueprint(events_bp)
 app.register_blueprint(calendars_bp)
 app.register_blueprint(reminders_bp)
+app.register_blueprint(todos_bp)
+app.register_blueprint(voice_bp)
 
 with app.app_context():
     db.create_all()
