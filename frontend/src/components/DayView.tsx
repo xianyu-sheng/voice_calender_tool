@@ -40,6 +40,8 @@ const toLocalDateStr = (d: Date): string => {
 };
 
 // 从 ISO 字符串解析出本地日期字符串
+// 后端存储的是无时区的 naive datetime（如 "2025-05-31T10:00:00"）
+// new Date() 会将其视为本地时间解析，所以 getFullYear/getMonth/getDate 就是本地日期
 const parseToLocalDateStr = (isoStr: string): string => {
   const d = new Date(isoStr);
   return toLocalDateStr(d);
@@ -82,9 +84,24 @@ const DayView: React.FC<DayViewProps> = ({
   const dayEvents = events
     .filter(event => {
       const eventDateStr = parseToLocalDateStr(event.start_time);
-      return eventDateStr === currentDateStr;
+      const match = eventDateStr === currentDateStr;
+      // 调试日志：帮助排查日期过滤问题
+      if (!match && events.length <= 20) {
+        console.log(`[DayView] 事件 "${event.title}" 日期=${eventDateStr}, 当前=${currentDateStr}, 匹配=${match}, start_time原始=${event.start_time}`);
+      }
+      return match;
     })
     .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+  // 调试日志
+  console.log(`[DayView] currentDateStr=${currentDateStr}, 总事件=${events.length}, 匹配事件=${dayEvents.length}`);
+  if (events.length > 0) {
+    console.log(`[DayView] 前3个事件:`, events.slice(0, 3).map(e => ({
+      title: e.title,
+      start_time: e.start_time,
+      localDate: parseToLocalDateStr(e.start_time)
+    })));
+  }
 
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);

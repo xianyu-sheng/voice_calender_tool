@@ -131,6 +131,12 @@ function App() {
       const data = await response.json();
       if (data.success) {
         setEvents(data.data);
+        // 调试日志
+        console.log(`[App] fetchEvents: 获取到 ${data.data.length} 个事件`);
+        data.data.slice(0, 5).forEach((e: CalendarEvent) => {
+          const d = new Date(e.start_time);
+          console.log(`  事件 "${e.title}" start_time=${e.start_time}, 本地日期=${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`);
+        });
       }
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -398,6 +404,7 @@ function App() {
   };
 
   const handleDateSelect = (date: Date) => {
+    console.log(`[App] handleDateSelect:`, date.toISOString(), 'local:', date.getFullYear(), date.getMonth()+1, date.getDate());
     setCurrentDate(date);
     if (view === 'month') {
       setView('day');
