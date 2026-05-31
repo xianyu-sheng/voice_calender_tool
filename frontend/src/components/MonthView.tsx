@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 interface Event {
   id: number;
@@ -37,8 +37,6 @@ const MonthView: React.FC<MonthViewProps> = ({
   onTodoToggle,
   onDateClickForTodo
 }) => {
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
-
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -59,25 +57,8 @@ const MonthView: React.FC<MonthViewProps> = ({
     return todos.filter(todo => todo.date === dateStr);
   };
 
-  const handleDayClick = (date: Date, dayEvents: Event[], dayTodos: TodoItem[]) => {
-    const dateKey = date.toDateString();
-    const hasContent = dayEvents.length > 0 || dayTodos.length > 0;
-
-    console.log(`[MonthView] handleDayClick: date=${dateKey}, hasContent=${hasContent}, expandedDate=${expandedDate}, events=${dayEvents.length}, todos=${dayTodos.length}`);
-
-    if (expandedDate === dateKey) {
-      console.log(`[MonthView] 收起展开: ${dateKey}`);
-      setExpandedDate(null);
-      return;
-    }
-
-    if (hasContent) {
-      console.log(`[MonthView] 展开日期: ${dateKey}`);
-      setExpandedDate(dateKey);
-    } else {
-      console.log(`[MonthView] 导航到日期: ${dateKey}`);
-      onDateClick(date);
-    }
+  const handleDayClick = (date: Date) => {
+    onDateClick(date);
   };
 
   const getPriorityColor = (priority: string) => {
@@ -111,15 +92,13 @@ const MonthView: React.FC<MonthViewProps> = ({
       const isToday = date.toDateString() === today.toDateString();
       const dayEvents = getEventsForDate(date);
       const dayTodos = getTodosForDate(date);
-      const dateKey = date.toDateString();
-      const isExpanded = expandedDate === dateKey;
       const hasContent = dayEvents.length > 0 || dayTodos.length > 0;
 
       days.push(
         <div
           key={day}
-          className={`calendar-day ${isToday ? 'today' : ''} ${isExpanded ? 'expanded' : ''} ${hasContent ? 'has-events' : ''}`}
-          onClick={() => { console.log(`[MonthView] 单元格点击: day=${day}, date=${date.toDateString()}`); handleDayClick(date, dayEvents, dayTodos); }}
+          className={`calendar-day ${isToday ? 'today' : ''} ${hasContent ? 'has-events' : ''}`}
+          onClick={() => handleDayClick(date)}
         >
           <div className="day-header">
             <span className={`day-number ${isToday ? 'today-number' : ''}`}>
@@ -129,92 +108,27 @@ const MonthView: React.FC<MonthViewProps> = ({
               <span className="event-count">{dayEvents.length + dayTodos.length}</span>
             )}
           </div>
-          {!isExpanded && hasContent && (
+          {hasContent && (
             <div className="event-dots">
-              {dayEvents.slice(0, 2).map((event) => (
+              {dayEvents.slice(0, 3).map((event) => (
                 <span
                   key={`event-${event.id}`}
                   className="event-dot"
                   style={{ backgroundColor: event.color || '#1890ff' }}
+                  onClick={(e) => { e.stopPropagation(); onEventClick(event); }}
                 />
               ))}
-              {dayTodos.slice(0, 2).map((todo) => (
+              {dayTodos.slice(0, 3).map((todo) => (
                 <span
                   key={`todo-${todo.id}`}
                   className="todo-dot"
                   style={{ backgroundColor: getPriorityColor(todo.priority) }}
+                  onClick={(e) => { e.stopPropagation(); onTodoToggle(todo.id); }}
                 />
               ))}
-              {(dayEvents.length + dayTodos.length) > 4 && (
-                <span className="more-dots">+{dayEvents.length + dayTodos.length - 4}</span>
+              {(dayEvents.length + dayTodos.length) > 6 && (
+                <span className="more-dots" onClick={(e) => { e.stopPropagation(); onDateClickForTodo(date); }}>+{dayEvents.length + dayTodos.length - 6}</span>
               )}
-            </div>
-          )}
-          {isExpanded && (
-            <div className="day-events-expanded">
-              {dayEvents.map(event => (
-                <div
-                  key={`event-${event.id}`}
-                  className="event-item-compact"
-                  style={{ borderLeftColor: event.color || '#1890ff' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEventClick(event);
-                  }}
-                >
-                  <span className="event-time-compact">
-                    {new Date(event.start_time).getHours().toString().padStart(2, '0')}:
-                    {new Date(event.start_time).getMinutes().toString().padStart(2, '0')}
-                  </span>
-                  <span className="event-title-compact">{event.title}</span>
-                </div>
-              ))}
-              {dayTodos.map(todo => (
-                <div
-                  key={`todo-${todo.id}`}
-                  className={`todo-item-compact ${todo.completed ? 'completed' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTodoToggle(todo.id);
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={todo.completed}
-                    onChange={() => {}}
-                    className="todo-checkbox"
-                  />
-                  <span className="todo-title">{todo.title}</span>
-                  <div className="todo-progress-mini">
-                    <div
-                      className="todo-progress-fill-mini"
-                      style={{ width: `${todo.progress}%`, backgroundColor: getPriorityColor(todo.priority) }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-              <div className="expanded-actions">
-                <button
-                  className="add-todo-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDateClickForTodo(date);
-                  }}
-                >
-                  + 添加任务
-                </button>
-                <button
-                  className="view-day-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log(`[MonthView] 查看详情点击: date=${date.toDateString()}, day=${date.getDate()}`);
-                    setExpandedDate(null);
-                    onDateClick(date);
-                  }}
-                >
-                  查看详情
-                </button>
-              </div>
             </div>
           )}
         </div>
