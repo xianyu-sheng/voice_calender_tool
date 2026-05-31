@@ -2,4 +2,4 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-from .models import Event, Calendar, Reminder
+from .models import Event, Calendar, Reminder, Todo

@@ -9,18 +9,33 @@ interface Event {
   location?: string;
 }
 
+interface TodoItem {
+  id: number;
+  title: string;
+  date: string;
+  completed: boolean;
+  progress: number;
+  priority: 'low' | 'medium' | 'high';
+}
+
 interface MonthViewProps {
   currentDate: Date;
   events: Event[];
+  todos: TodoItem[];
   onDateClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
+  onTodoToggle: (id: number) => void;
+  onDateClickForTodo: (date: Date) => void;
 }
 
 const MonthView: React.FC<MonthViewProps> = ({
   currentDate,
   events,
+  todos,
   onDateClick,
-  onEventClick
+  onEventClick,
+  onTodoToggle,
+  onDateClickForTodo
 }) => {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
@@ -39,12 +54,26 @@ const MonthView: React.FC<MonthViewProps> = ({
     });
   };
 
-  const handleDayClick = (date: Date, dayEvents: Event[]) => {
+  const getTodosForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return todos.filter(todo => todo.date === dateStr);
+  };
+
+  const handleDayClick = (date: Date, dayEvents: Event[], dayTodos: TodoItem[]) => {
     const dateKey = date.toDateString();
-    if (dayEvents.length > 0) {
+    if (dayEvents.length > 0 || dayTodos.length > 0) {
       setExpandedDate(expandedDate === dateKey ? null : dateKey);
     }
     onDateClick(date);
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return '#ff4d4f';
+      case 'medium': return '#faad14';
+      case 'low': return '#52c41a';
+      default: return '#1890ff';
+    }
   };
 
   const renderCalendarDays = () => {
@@ -68,40 +97,51 @@ const MonthView: React.FC<MonthViewProps> = ({
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
       const isToday = date.toDateString() === today.toDateString();
       const dayEvents = getEventsForDate(date);
+      const dayTodos = getTodosForDate(date);
       const dateKey = date.toDateString();
       const isExpanded = expandedDate === dateKey;
+      const hasContent = dayEvents.length > 0 || dayTodos.length > 0;
 
       days.push(
         <div
           key={day}
-          className={`calendar-day ${isToday ? 'today' : ''} ${isExpanded ? 'expanded' : ''} ${dayEvents.length > 0 ? 'has-events' : ''}`}
-          onClick={() => handleDayClick(date, dayEvents)}
+          className={`calendar-day ${isToday ? 'today' : ''} ${isExpanded ? 'expanded' : ''} ${hasContent ? 'has-events' : ''}`}
+          onClick={() => handleDayClick(date, dayEvents, dayTodos)}
         >
           <div className="day-header">
             <span className={`day-number ${isToday ? 'today-number' : ''}`}>
               {day}
             </span>
-            {dayEvents.length > 0 && (
-              <span className="event-count">{dayEvents.length}</span>
+            {hasContent && (
+              <span className="event-count">{dayEvents.length + dayTodos.length}</span>
             )}
           </div>
-          {!isExpanded && dayEvents.length > 0 && (
+          {!isExpanded && hasContent && (
             <div className="event-dots">
-              {dayEvents.slice(0, 3).map((event) => (
+              {dayEvents.slice(0, 2).map((event) => (
                 <span
-                  key={event.id}
+                  key={`event-${event.id}`}
                   className="event-dot"
                   style={{ backgroundColor: event.color || '#1890ff' }}
                 />
               ))}
-              {dayEvents.length > 3 && <span className="more-dots">+{dayEvents.length - 3}</span>}
+              {dayTodos.slice(0, 2).map((todo) => (
+                <span
+                  key={`todo-${todo.id}`}
+                  className="todo-dot"
+                  style={{ backgroundColor: getPriorityColor(todo.priority) }}
+                />
+              ))}
+              {(dayEvents.length + dayTodos.length) > 4 && (
+                <span className="more-dots">+{dayEvents.length + dayTodos.length - 4}</span>
+              )}
             </div>
           )}
           {isExpanded && (
             <div className="day-events-expanded">
               {dayEvents.map(event => (
                 <div
-                  key={event.id}
+                  key={`event-${event.id}`}
                   className="event-item-compact"
                   style={{ borderLeftColor: event.color || '#1890ff' }}
                   onClick={(e) => {
@@ -116,6 +156,39 @@ const MonthView: React.FC<MonthViewProps> = ({
                   <span className="event-title-compact">{event.title}</span>
                 </div>
               ))}
+              {dayTodos.map(todo => (
+                <div
+                  key={`todo-${todo.id}`}
+                  className={`todo-item-compact ${todo.completed ? 'completed' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTodoToggle(todo.id);
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={todo.completed}
+                    onChange={() => {}}
+                    className="todo-checkbox"
+                  />
+                  <span className="todo-title">{todo.title}</span>
+                  <div className="todo-progress-mini">
+                    <div
+                      className="todo-progress-fill-mini"
+                      style={{ width: `${todo.progress}%`, backgroundColor: getPriorityColor(todo.priority) }}
+                    ></div>
+                  </div>
+                </div>
+              ))}
+              <button
+                className="add-todo-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDateClickForTodo(date);
+                }}
+              >
+                + 添加任务
+              </button>
             </div>
           )}
         </div>

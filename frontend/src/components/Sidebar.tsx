@@ -1,110 +1,144 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 interface SidebarProps {
+  view: 'day' | 'week' | 'month';
+  onViewChange: (view: 'day' | 'week' | 'month') => void;
   currentDate: Date;
-  onDateSelect: (date: Date) => void;
+  onToday: () => void;
+  onPrev: () => void;
+  onNext: () => void;
   calendars: Array<{ id: number; name: string; color: string }>;
   onCalendarToggle: (id: number) => void;
   activeCalendars: number[];
+  isListening: boolean;
+  onVoiceToggle: () => void;
+  isSupported: boolean;
+  onQuickAction: (action: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
+  view,
+  onViewChange,
   currentDate,
-  onDateSelect,
+  onToday,
+  onPrev,
+  onNext,
   calendars,
   onCalendarToggle,
-  activeCalendars
+  activeCalendars,
+  isListening,
+  onVoiceToggle,
+  isSupported,
+  onQuickAction
 }) => {
-  const [miniCalendarDate, setMiniCalendarDate] = useState(new Date());
-
-  const getDaysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  };
-
-  const getFirstDayOfMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  };
-
-  const renderMiniCalendar = () => {
-    const daysInMonth = getDaysInMonth(miniCalendarDate);
-    const firstDay = getFirstDayOfMonth(miniCalendarDate);
-    const days = [];
-    const today = new Date();
-    const selectedDate = currentDate;
-
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="mini-day empty"></div>);
-    }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(miniCalendarDate.getFullYear(), miniCalendarDate.getMonth(), day);
-      const isToday = date.toDateString() === today.toDateString();
-      const isSelected = date.toDateString() === selectedDate.toDateString();
-      const isCurrentMonth = date.getMonth() === miniCalendarDate.getMonth();
-
-      days.push(
-        <div
-          key={day}
-          className={`mini-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${!isCurrentMonth ? 'other-month' : ''}`}
-          onClick={() => onDateSelect(date)}
-        >
-          {day}
-        </div>
-      );
-    }
-
-    return days;
-  };
-
-  const handlePrevMonth = () => {
-    setMiniCalendarDate(new Date(miniCalendarDate.getFullYear(), miniCalendarDate.getMonth() - 1, 1));
-  };
-
-  const handleNextMonth = () => {
-    setMiniCalendarDate(new Date(miniCalendarDate.getFullYear(), miniCalendarDate.getMonth() + 1, 1));
-  };
-
   const monthNames = [
     '一月', '二月', '三月', '四月', '五月', '六月',
     '七月', '八月', '九月', '十月', '十一月', '十二月'
   ];
 
+  const formatMonth = () => {
+    return `${currentDate.getFullYear()}年 ${monthNames[currentDate.getMonth()]}`;
+  };
+
+  const quickCommands = [
+    { icon: '+', text: '创建事件', action: 'create' },
+    { icon: '✓', text: '添加任务', action: 'add_todo' },
+    { icon: '?', text: '查看今天', action: 'today' },
+    { icon: '📋', text: '查看任务', action: 'view_todos' },
+    { icon: 'W', text: '查看本周', action: 'week' },
+    { icon: 'M', text: '查看本月', action: 'month' },
+  ];
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-section mini-calendar-section">
-        <div className="mini-calendar-header">
-          <button className="btn-mini-nav" onClick={handlePrevMonth}>
+      <div className="sidebar-section voice-section">
+        <button
+          className={`btn-voice-sidebar ${isListening ? 'listening' : ''} ${!isSupported ? 'disabled' : ''}`}
+          onClick={onVoiceToggle}
+          disabled={!isSupported}
+        >
+          <div className="voice-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+            {isListening && <span className="voice-pulse"></span>}
+          </div>
+          <span className="voice-text">
+            {!isSupported ? '不支持语音' : isListening ? '聆听中...' : '语音输入'}
+          </span>
+        </button>
+      </div>
+
+      <div className="sidebar-divider"></div>
+
+      <div className="sidebar-section nav-section">
+        <div className="month-nav">
+          <button className="btn-nav-sidebar" onClick={onPrev}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M10.354 4.354a.5.5 0 00-.708-.708l-4 4a.5.5 0 000 .708l4 4a.5.5 0 00.708-.708L6.707 8l3.647-3.646z"/>
             </svg>
           </button>
-          <span className="mini-calendar-title">
-            {miniCalendarDate.getFullYear()}年 {monthNames[miniCalendarDate.getMonth()]}
-          </span>
-          <button className="btn-mini-nav" onClick={handleNextMonth}>
+          <span className="month-title">{formatMonth()}</span>
+          <button className="btn-nav-sidebar" onClick={onNext}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M5.646 4.354a.5.5 0 01.708-.708l4 4a.5.5 0 010 .708l-4 4a.5.5 0 01-.708-.708L9.293 8 5.646 4.354z"/>
             </svg>
           </button>
         </div>
-        <div className="mini-calendar-weekdays">
-          <span>日</span>
-          <span>一</span>
-          <span>二</span>
-          <span>三</span>
-          <span>四</span>
-          <span>五</span>
-          <span>六</span>
+        <button className="btn-today-sidebar" onClick={onToday}>
+          今天
+        </button>
+      </div>
+
+      <div className="sidebar-divider"></div>
+
+      <div className="sidebar-section view-section">
+        <h3 className="section-title">视图</h3>
+        <div className="view-buttons">
+          <button
+            className={`btn-view-sidebar ${view === 'day' ? 'active' : ''}`}
+            onClick={() => onViewChange('day')}
+          >
+            日
+          </button>
+          <button
+            className={`btn-view-sidebar ${view === 'week' ? 'active' : ''}`}
+            onClick={() => onViewChange('week')}
+          >
+            周
+          </button>
+          <button
+            className={`btn-view-sidebar ${view === 'month' ? 'active' : ''}`}
+            onClick={() => onViewChange('month')}
+          >
+            月
+          </button>
         </div>
-        <div className="mini-calendar-days">
-          {renderMiniCalendar()}
+      </div>
+
+      <div className="sidebar-divider"></div>
+
+      <div className="sidebar-section commands-section">
+        <h3 className="section-title">快捷指令</h3>
+        <div className="quick-commands">
+          {quickCommands.map((cmd, index) => (
+            <button
+              key={index}
+              className="btn-quick-command"
+              onClick={() => onQuickAction(cmd.action)}
+            >
+              <span className="cmd-icon">{cmd.icon}</span>
+              <span className="cmd-text">{cmd.text}</span>
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="sidebar-divider"></div>
 
       <div className="sidebar-section calendars-section">
-        <h3 className="section-title">我的日历</h3>
+        <h3 className="section-title">日历</h3>
         <div className="calendar-list">
           {calendars.map(calendar => (
             <label key={calendar.id} className="calendar-item">
@@ -120,26 +154,6 @@ const Sidebar: React.FC<SidebarProps> = ({
               <span className="calendar-name">{calendar.name}</span>
             </label>
           ))}
-        </div>
-      </div>
-
-      <div className="sidebar-divider"></div>
-
-      <div className="sidebar-section voice-hints-section">
-        <h3 className="section-title">语音指令示例</h3>
-        <div className="voice-hints">
-          <div className="voice-hint">
-            <span className="hint-icon">🎤</span>
-            <span className="hint-text">"创建明天下午3点的会议"</span>
-          </div>
-          <div className="voice-hint">
-            <span className="hint-icon">🎤</span>
-            <span className="hint-text">"查看今天的安排"</span>
-          </div>
-          <div className="voice-hint">
-            <span className="hint-icon">🎤</span>
-            <span className="hint-text">"删除下周三的会议"</span>
-          </div>
         </div>
       </div>
     </aside>

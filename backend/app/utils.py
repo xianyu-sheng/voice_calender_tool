@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from . import db
-from .models import Event, Calendar, Reminder
+from .models import Event, Calendar, Reminder, Todo
 
 def create_event(title, start_time, end_time, description=None, location=None,
                  is_all_day=False, reminder_minutes=15, calendar_id=None):
@@ -82,3 +82,78 @@ def mark_reminder_sent(reminder_id):
         reminder.is_sent = True
         db.session.commit()
     return reminder
+
+def create_todo(title, todo_date, priority='medium', auto_postpone=True):
+    todo = Todo(
+        title=title,
+        date=todo_date,
+        priority=priority,
+        auto_postpone=auto_postpone
+    )
+    db.session.add(todo)
+    db.session.commit()
+    return todo
+
+def get_todo(todo_id):
+    return Todo.query.get(todo_id)
+
+def get_todos(start_date=None, end_date=None):
+    query = Todo.query
+    if start_date:
+        query = query.filter(Todo.date >= start_date)
+    if end_date:
+        query = query.filter(Todo.date <= end_date)
+    return query.order_by(Todo.date, Todo.priority).all()
+
+def update_todo(todo_id, **kwargs):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return None
+    for key, value in kwargs.items():
+        if hasattr(todo, key):
+            setattr(todo, key, value)
+    db.session.commit()
+    return todo
+
+def delete_todo(todo_id):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return False
+    db.session.delete(todo)
+    db.session.commit()
+    return True
+
+def toggle_todo(todo_id):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return None
+    todo.completed = not todo.completed
+    if todo.completed:
+        todo.progress = 100
+    db.session.commit()
+    return todo
+
+def update_todo_progress(todo_id, progress):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return None
+    todo.progress = progress
+    if progress >= 100:
+        todo.completed = True
+    db.session.commit()
+    return todo
+
+def postpone_todos():
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    todos_to_postpone = Todo.query.filter(
+        Todo.date <= yesterday,
+        Todo.completed == False,
+        Todo.auto_postpone == True
+    ).all()
+
+    for todo in todos_to_postpone:
+        todo.date = today
+
+    db.session.commit()
+    return len(todos_to_postpone)

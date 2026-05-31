@@ -1,37 +1,78 @@
 export interface ParsedCommand {
-  intent: 'create_event' | 'delete_event' | 'view_events' | 'edit_event' | 'set_reminder' | 'unknown';
+  intent: 'create_event' | 'delete_event' | 'view_events' | 'edit_event' | 'set_reminder' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'view_todos' | 'unknown';
   title?: string;
   date?: string;
   time?: string;
   location?: string;
   reminderMinutes?: number;
+  priority?: 'low' | 'medium' | 'high';
   rawText: string;
 }
 
 const INTENT_PATTERNS = {
   create_event: [
-    /创建(一个)?(.*)/,
-    /新建(一个)?(.*)/,
-    /添加(一个)?(.*)/,
-    /添加日程(.*)/,
-    /新建日程(.*)/,
-    /我(明天|今天|下周|后天)?(上午|下午|晚上)?(\d+点|十点|九点|八点|七点|六点|五点|四点|三点|两点|一点)?(.*)/,
+    /创建(一个)?(.*)事件/,
+    /新建(一个)?(.*)事件/,
+    /添加(一个)?(.*)事件/,
+    /创建(一个)?(.*)日程/,
+    /新建(一个)?(.*)日程/,
+    /添加(一个)?(.*)日程/,
+    /安排(一个)?(.*)会议/,
+    /预约(.*)/,
   ],
   delete_event: [
-    /删除(.*)/,
-    /移除(.*)/,
-    /取消(.*)/,
+    /删除(.*)事件/,
+    /移除(.*)事件/,
+    /取消(.*)事件/,
+    /删除(.*)日程/,
+    /取消(.*)会议/,
   ],
   view_events: [
-    /查看(今天|明天|本周|本月|日程|事件)/,
-    /看看(今天|明天|本周|本月|日程|事件)/,
-    /显示(今天|明天|本周|本月|日程|事件)/,
+    /查看(今天|明天|本周|本月|日程|事件|安排)/,
+    /看看(今天|明天|本周|本月|日程|事件|安排)/,
+    /显示(今天|明天|本周|本月|日程|事件|安排)/,
     /有什么(安排|日程|事件)/,
+    /今天(有|有什么)(安排|日程|事件)/,
+    /明天(有|有什么)(安排|日程|事件)/,
   ],
   set_reminder: [
     /提醒我(.*)/,
     /设置提醒(.*)/,
     /(.*)提醒(.*)/,
+  ],
+  create_todo: [
+    /创建(一个)?(.*)任务/,
+    /新建(一个)?(.*)任务/,
+    /添加(一个)?(.*)任务/,
+    /添加(一个)?(.*)待办/,
+    /新建(一个)?(.*)待办/,
+    /我(需要|要)(做|完成|处理)(.*)/,
+    /记(下|住)(.*)/,
+    /(.*)(任务|待办|todo)/,
+  ],
+  complete_todo: [
+    /完成(.*)任务/,
+    /完成(.*)待办/,
+    /做完(.*)/,
+    /搞定了(.*)/,
+    /完成了(.*)/,
+    /标记(.*)完成/,
+    /勾选(.*)/,
+  ],
+  delete_todo: [
+    /删除(.*)任务/,
+    /删除(.*)待办/,
+    /移除(.*)任务/,
+    /取消(.*)任务/,
+    /不要(.*)任务/,
+  ],
+  view_todos: [
+    /查看(今天|明天|本周|本月)的?(任务|待办)/,
+    /看看(今天|明天|本周|本月)的?(任务|待办)/,
+    /显示(今天|明天|本周|本月)的?(任务|待办)/,
+    /有什么(任务|待办)/,
+    /今天(有|有什么)(任务|待办)/,
+    /我的(任务|待办)/,
   ],
 };
 
@@ -56,6 +97,12 @@ const TIME_PATTERNS = {
     relativeMinutes: /(\d+|[一二三四五六七八九十]+)分钟后/,
     halfHour: /半/,
   },
+};
+
+const PRIORITY_PATTERNS = {
+  high: /高优先|重要|紧急|急/,
+  medium: /中优先|一般/,
+  low: /低优先|不急|慢慢/,
 };
 
 const CHINESE_NUMBER_MAP: { [key: string]: number } = {
@@ -200,22 +247,43 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
   return { date, time, reminderMinutes };
 }
 
+function extractPriority(text: string): 'low' | 'medium' | 'high' | undefined {
+  if (PRIORITY_PATTERNS.high.test(text)) return 'high';
+  if (PRIORITY_PATTERNS.medium.test(text)) return 'medium';
+  if (PRIORITY_PATTERNS.low.test(text)) return 'low';
+  return undefined;
+}
+
 function extractTitle(text: string, intent: string): string {
   let title = text;
 
-  if (intent === 'create_event') {
-    title = title
-      .replace(/创建|新建|添加|一个|日程|事件/g, '')
-      .replace(/明天|今天|后天|下周[一二三四五六日天]/g, '')
-      .replace(/上午|下午|晚上|早上/g, '')
-      .replace(/\d+[点时]\d*分?/g, '')
-      .replace(/[一二三四五六七八九十]+点/g, '')
-      .replace(/在(.*)/, '')
-      .trim();
+  const commonPatterns = [
+    /创建|新建|添加|一个|的/,
+    /删除|移除|取消|完成|做完|搞定|标记|勾选/,
+    /查看|看看|显示|有什么/,
+    /任务|待办|事件|日程|会议|安排/,
+    /明天|今天|后天|下周[一二三四五六日天]/,
+    /上午|下午|晚上|早上/,
+    /\d+[点时]\d*分?/,
+    /[一二三四五六七八九十]+点/,
+    /在(.+)/,
+    /我(需要|要)(做|完成|处理)/,
+    /记(下|住)/,
+    /高优先|重要|紧急|急|中优先|一般|低优先|不急|慢慢/,
+  ];
+
+  for (const pattern of commonPatterns) {
+    title = title.replace(pattern, '');
   }
 
+  title = title.trim();
+
   if (!title || title.length === 0) {
-    title = '新事件';
+    if (intent.includes('todo')) {
+      title = '新任务';
+    } else {
+      title = '新事件';
+    }
   }
 
   return title;
@@ -238,6 +306,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
         const { date, time, reminderMinutes } = extractTime(normalizedText);
         const title = extractTitle(text, intent);
         const location = extractLocation(normalizedText);
+        const priority = extractPriority(normalizedText);
 
         return {
           intent: intent as ParsedCommand['intent'],
@@ -246,6 +315,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
           time,
           location,
           reminderMinutes,
+          priority,
           rawText: text,
         };
       }
@@ -262,6 +332,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
       time,
       location: extractLocation(normalizedText),
       reminderMinutes,
+      priority: extractPriority(normalizedText),
       rawText: text,
     };
   }

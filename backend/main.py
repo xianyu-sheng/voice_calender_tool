@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from app import db
-from app.api import events_bp, calendars_bp, reminders_bp
+from app.api import events_bp, calendars_bp, reminders_bp, todos_bp
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
@@ -14,6 +14,7 @@ db.init_app(app)
 app.register_blueprint(events_bp)
 app.register_blueprint(calendars_bp)
 app.register_blueprint(reminders_bp)
+app.register_blueprint(todos_bp)
 
 with app.app_context():
     db.create_all()

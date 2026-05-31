@@ -5,6 +5,7 @@ import MonthView from './components/MonthView'
 import WeekView from './components/WeekView'
 import DayView from './components/DayView'
 import EventModal from './components/EventModal'
+import TodoModal from './components/TodoModal'
 import VoiceFeedback from './components/VoiceFeedback'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
@@ -24,6 +25,16 @@ interface CalendarEvent {
   reminder_minutes?: number;
 }
 
+interface TodoItem {
+  id: number;
+  title: string;
+  date: string;
+  completed: boolean;
+  progress: number;
+  priority: 'low' | 'medium' | 'high';
+  auto_postpone: boolean;
+}
+
 interface Calendar {
   id: number;
   name: string;
@@ -34,11 +45,14 @@ function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [activeCalendars, setActiveCalendars] = useState<number[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [todoModalOpen, setTodoModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null);
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
 
   const {
@@ -58,7 +72,9 @@ function App() {
   useEffect(() => {
     fetchCalendars();
     fetchEvents();
+    fetchTodos();
     requestPermission();
+    autoPostponeTodos();
   }, []);
 
   useEffect(() => {
@@ -108,6 +124,32 @@ function App() {
     }
   };
 
+  const fetchTodos = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/todos');
+      const data = await response.json();
+      if (data.success) {
+        setTodos(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching todos:', error);
+    }
+  };
+
+  const autoPostponeTodos = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/todos/postpone', {
+        method: 'POST'
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchTodos();
+      }
+    } catch (error) {
+      console.error('Error postponing todos:', error);
+    }
+  };
+
   const handleVoiceCommand = useCallback(async (text: string) => {
     const command = parseVoiceCommand(text);
     console.log('Parsed command:', command);
@@ -116,14 +158,20 @@ function App() {
       case 'create_event':
         await handleVoiceCreateEvent(command);
         break;
+      case 'create_todo':
+        await handleVoiceCreateTodo(command);
+        break;
       case 'view_events':
         handleVoiceViewEvents(command);
         break;
       case 'delete_event':
         setVoiceFeedback('请在界面上选择要删除的事件');
         break;
+      case 'complete_todo':
+        await handleVoiceCompleteTodo(command);
+        break;
       default:
-        setVoiceFeedback('抱歉，我没有理解您的指令。请试试"创建事件"或"查看今天"');
+        setVoiceFeedback('抱歉，我没有理解您的指令');
     }
 
     setTimeout(() => setVoiceFeedback(null), 3000);
@@ -170,6 +218,42 @@ function App() {
       }
     } catch (error) {
       setVoiceFeedback('创建事件失败，请重试');
+    }
+  };
+
+  const handleVoiceCreateTodo = async (command: ParsedCommand) => {
+    const today = new Date().toISOString().split('T')[0];
+    const todoData = {
+      title: command.title || '新任务',
+      date: command.date || today,
+      priority: command.priority || 'medium',
+      auto_postpone: true
+    };
+
+    try {
+      const response = await fetch('http://localhost:8000/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(todoData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setVoiceFeedback(`已创建任务: ${todoData.title}`);
+        fetchTodos();
+      }
+    } catch (error) {
+      setVoiceFeedback('创建任务失败，请重试');
+    }
+  };
+
+  const handleVoiceCompleteTodo = async (command: ParsedCommand) => {
+    const todo = todos.find(t => t.title.includes(command.title || ''));
+    if (todo) {
+      await handleToggleTodo(todo.id);
+      setVoiceFeedback(`已完成任务: ${todo.title}`);
+    } else {
+      setVoiceFeedback('未找到该任务');
     }
   };
 
@@ -287,6 +371,37 @@ function App() {
     }
   };
 
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'create':
+        setSelectedDate(new Date());
+        setSelectedEvent(null);
+        setModalOpen(true);
+        break;
+      case 'add_todo':
+        setSelectedDate(new Date());
+        setSelectedTodo(null);
+        setTodoModalOpen(true);
+        break;
+      case 'today':
+        handleToday();
+        setView('day');
+        break;
+      case 'view_todos':
+        handleToday();
+        setView('day');
+        break;
+      case 'week':
+        handleToday();
+        setView('week');
+        break;
+      case 'month':
+        handleToday();
+        setView('month');
+        break;
+    }
+  };
+
   const handleSaveEvent = async (event: { id?: number; title: string; start_time: string; end_time: string; description?: string; location?: string; reminder_minutes?: number }) => {
     try {
       const method = event.id ? 'PUT' : 'POST';
@@ -326,61 +441,169 @@ function App() {
     }
   };
 
+  const handleToggleTodo = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/todos/${id}/toggle`, {
+        method: 'PUT'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchTodos();
+      }
+    } catch (error) {
+      console.error('Error toggling todo:', error);
+    }
+  };
+
+  const handleUpdateTodoProgress = async (id: number, progress: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/todos/${id}/progress`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progress })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchTodos();
+      }
+    } catch (error) {
+      console.error('Error updating todo progress:', error);
+    }
+  };
+
+  const handleSaveTodo = async (todo: { id?: number; title: string; date: string; priority?: string; auto_postpone?: boolean }) => {
+    try {
+      const method = todo.id ? 'PUT' : 'POST';
+      const url = todo.id
+        ? `http://localhost:8000/api/todos/${todo.id}`
+        : 'http://localhost:8000/api/todos';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(todo)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setTodoModalOpen(false);
+        fetchTodos();
+      }
+    } catch (error) {
+      console.error('Error saving todo:', error);
+    }
+  };
+
+  const handleDeleteTodo = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/todos/${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setTodoModalOpen(false);
+        fetchTodos();
+      }
+    } catch (error) {
+      console.error('Error deleting todo:', error);
+    }
+  };
+
+  const handleDateClickForTodo = (date: Date) => {
+    setSelectedDate(date);
+    setSelectedTodo(null);
+    setTodoModalOpen(true);
+  };
+
   const filteredEvents = events.filter(event => {
     if (calendars.length === 0) return true;
     const calendarId = event.id % calendars.length || 1;
     return activeCalendars.includes(calendarId);
   });
 
+  const getTodosForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return todos.filter(todo => todo.date === dateStr);
+  };
+
+  const overallProgress = todos.length > 0
+    ? Math.round(todos.reduce((sum, t) => sum + t.progress, 0) / todos.length)
+    : 0;
+
   return (
     <div className="app">
-      <Header
-        currentDate={currentDate}
-        onPrev={handlePrev}
-        onNext={handleNext}
-        onToday={handleToday}
-        view={view}
-        onViewChange={setView}
-        onVoiceStart={handleVoiceToggle}
-        isListening={isListening}
-        isSupported={isSupported}
-      />
+      <Header />
 
       <div className="app-body">
         <Sidebar
+          view={view}
+          onViewChange={setView}
           currentDate={currentDate}
-          onDateSelect={handleDateSelect}
+          onToday={handleToday}
+          onPrev={handlePrev}
+          onNext={handleNext}
           calendars={calendars}
           onCalendarToggle={handleCalendarToggle}
           activeCalendars={activeCalendars}
+          isListening={isListening}
+          onVoiceToggle={handleVoiceToggle}
+          isSupported={isSupported}
+          onQuickAction={handleQuickAction}
         />
 
         <main className="main-content">
-          {view === 'month' && (
-            <MonthView
-              currentDate={currentDate}
-              events={filteredEvents}
-              onDateClick={handleDateSelect}
-              onEventClick={handleEventClick}
-            />
-          )}
-          {view === 'week' && (
-            <WeekView
-              currentDate={currentDate}
-              events={filteredEvents}
-              onTimeClick={handleTimeClick}
-              onEventClick={handleEventClick}
-              onEventDrop={handleEventDrop}
-            />
-          )}
-          {view === 'day' && (
-            <DayView
-              currentDate={currentDate}
-              events={filteredEvents}
-              onTimeClick={handleTimeClick}
-              onEventClick={handleEventClick}
-            />
-          )}
+          <div className="content-wrapper">
+            {view === 'month' && (
+              <MonthView
+                currentDate={currentDate}
+                events={filteredEvents}
+                todos={todos}
+                onDateClick={handleDateSelect}
+                onEventClick={handleEventClick}
+                onTodoToggle={handleToggleTodo}
+                onDateClickForTodo={handleDateClickForTodo}
+              />
+            )}
+            {view === 'week' && (
+              <WeekView
+                currentDate={currentDate}
+                events={filteredEvents}
+                todos={todos}
+                onTimeClick={handleTimeClick}
+                onEventClick={handleEventClick}
+                onEventDrop={handleEventDrop}
+                onTodoToggle={handleToggleTodo}
+              />
+            )}
+            {view === 'day' && (
+              <DayView
+                currentDate={currentDate}
+                events={filteredEvents}
+                todos={getTodosForDate(currentDate)}
+                onTimeClick={handleTimeClick}
+                onEventClick={handleEventClick}
+                onTodoToggle={handleToggleTodo}
+                onTodoProgressUpdate={handleUpdateTodoProgress}
+                onAddTodo={() => handleDateClickForTodo(currentDate)}
+              />
+            )}
+          </div>
+
+          <div className="progress-bar-container">
+            <div className="progress-label">
+              <span>今日进度</span>
+              <span>{overallProgress}%</span>
+            </div>
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{ width: `${overallProgress}%` }}
+              ></div>
+            </div>
+          </div>
         </main>
       </div>
 
@@ -400,8 +623,17 @@ function App() {
         onDelete={handleDeleteEvent}
         isEdit={!!selectedEvent}
       />
+
+      <TodoModal
+        todo={selectedTodo}
+        isOpen={todoModalOpen}
+        onClose={() => setTodoModalOpen(false)}
+        onSave={handleSaveTodo}
+        onDelete={handleDeleteTodo}
+        selectedDate={selectedDate}
+      />
     </div>
-  )
+  );
 }
 
 export default App

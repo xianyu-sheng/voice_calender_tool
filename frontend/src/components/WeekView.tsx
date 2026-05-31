@@ -8,17 +8,29 @@ interface Event {
   color?: string;
 }
 
+interface TodoItem {
+  id: number;
+  title: string;
+  date: string;
+  completed: boolean;
+  progress: number;
+  priority: 'low' | 'medium' | 'high';
+}
+
 interface WeekViewProps {
   currentDate: Date;
   events: Event[];
+  todos?: TodoItem[];
   onTimeClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
   onEventDrop?: (eventId: number, newStartTime: Date, newEndTime: Date) => void;
+  onTodoToggle?: (id: number) => void;
 }
 
 const WeekView: React.FC<WeekViewProps> = ({
   currentDate,
   events,
+  todos = [],
   onTimeClick,
   onEventClick,
   onEventDrop
@@ -89,6 +101,20 @@ const WeekView: React.FC<WeekViewProps> = ({
     });
   };
 
+  const getTodosForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return todos.filter(todo => todo.date === dateStr);
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return '#ff4d4f';
+      case 'medium': return '#faad14';
+      case 'low': return '#52c41a';
+      default: return '#1890ff';
+    }
+  };
+
   const weekDates = getWeekDates();
   const today = new Date();
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -101,6 +127,8 @@ const WeekView: React.FC<WeekViewProps> = ({
         <div className="time-gutter-header"></div>
         {weekDates.map((date, index) => {
           const isToday = date.toDateString() === today.toDateString();
+          const dayTodos = getTodosForDate(date);
+          const completedTodos = dayTodos.filter(t => t.completed).length;
           return (
             <div
               key={index}
@@ -110,6 +138,20 @@ const WeekView: React.FC<WeekViewProps> = ({
               <span className={`day-date ${isToday ? 'today-date' : ''}`}>
                 {date.getDate()}
               </span>
+              {dayTodos.length > 0 && (
+                <div className="week-todos-indicator">
+                  <span className="todo-count">{completedTodos}/{dayTodos.length}</span>
+                  <div className="todo-dots-row">
+                    {dayTodos.slice(0, 3).map(todo => (
+                      <span
+                        key={todo.id}
+                        className={`todo-dot-mini ${todo.completed ? 'completed' : ''}`}
+                        style={{ backgroundColor: getPriorityColor(todo.priority) }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
