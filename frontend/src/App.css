@@ -1650,7 +1650,7 @@ body {
   transform: translateX(-50%);
   z-index: 1000;
   min-width: 300px;
-  max-width: 500px;
+  max-width: 550px;
 }
 
 .voice-listening {
@@ -1661,6 +1661,29 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+/* 连接中状态 — 橙色主题 */
+.voice-connecting {
+  border-left: 4px solid #faad14;
+}
+
+.voice-connecting .voice-wave span {
+  background: #faad14;
+}
+
+/* 活跃聆听状态 — 绿色主题 */
+.voice-active {
+  border-left: 4px solid #52c41a;
+}
+
+.voice-active .voice-wave span {
+  background: #52c41a;
+}
+
+.voice-status-text {
+  color: #595959;
+  font-style: italic;
 }
 
 .voice-wave {
@@ -1677,6 +1700,11 @@ body {
   background: #1890ff;
   border-radius: 3px;
   animation: voiceWave 1.2s ease-in-out infinite;
+}
+
+/* 活跃聆听时加速动画 */
+.voice-wave.listening-active span {
+  animation-duration: 0.6s;
 }
 
 .voice-wave span:nth-child(1) { animation-delay: 0s; }

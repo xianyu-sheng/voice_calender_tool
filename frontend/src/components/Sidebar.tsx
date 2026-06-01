@@ -11,6 +11,7 @@ interface SidebarProps {
   onCalendarToggle: (id: number) => void;
   activeCalendars: number[];
   isListening: boolean;
+  voiceStatus?: 'idle' | 'connecting' | 'listening' | 'error';
   onVoiceToggle: () => void;
   isSupported: boolean;
   onQuickAction: (action: string) => void;
@@ -29,6 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onCalendarToggle,
   activeCalendars,
   isListening,
+  voiceStatus = 'idle',
   onVoiceToggle,
   isSupported,
   onQuickAction,
@@ -101,7 +103,11 @@ const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
             <span className="voice-text" style={{ fontWeight: isListening ? '700' : '500' }}>
-              {!isSupported ? '❌ 不支持语音' : isListening ? '🔴 正在录音...' : '🎤 点击开始语音'}
+              {!isSupported ? '❌ 不支持语音'
+                : voiceStatus === 'connecting' ? '🟡 连接中...'
+                : voiceStatus === 'listening' ? '🔴 正在录音...'
+                : isListening ? '🔴 正在录音...'
+                : '🎤 点击开始语音'}
             </span>
             {isListening && (
               <span className="voice-hint">说完后点击结束</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import MonthView from './components/MonthView'
@@ -75,6 +75,7 @@ function App() {
     interimTranscript,
     error: speechError,
     isSupported,
+    status: speechStatus,
     startListening,
     stopListening,
     resetTranscript
@@ -103,7 +104,8 @@ function App() {
 
   useEffect(() => {
     if (transcript) {
-      handleVoiceCommand(transcript);
+      console.log('🔔 transcript 变化，触发语音命令处理:', transcript);
+      handleVoiceCommandRef.current(transcript);
     }
   }, [transcript]);
 
@@ -178,9 +180,11 @@ function App() {
       setLlmResult(null);
       setLlmError('');
 
+      // 延迟一下显示解析中状态（需要在 try 外部声明以便 finally 清理）
+      let parsingTimer: ReturnType<typeof setTimeout> | null = null;
+
       try {
-        // 模拟解析过程延迟
-        setTimeout(() => setLlmStatus('parsing'), 800);
+        parsingTimer = setTimeout(() => setLlmStatus('parsing'), 800);
 
         const response = await fetch('http://localhost:8000/api/voice/parse', {
           method: 'POST',
@@ -188,13 +192,14 @@ function App() {
           body: JSON.stringify({ text, use_llm: true })
         });
         const data = await response.json();
+
         if (data.success && data.data.source === 'llm') {
           const result = data.data;
           // 显示结果
           setLlmResult(result);
           setLlmStatus('result');
 
-          // 返回解析结果
+          // 返回 LLM 解析结果，标记 source
           return {
             intent: result.intent || 'unknown',
             title: result.title,
@@ -205,31 +210,48 @@ function App() {
             description: result.description,
             priority: result.priority,
             reminderMinutes: result.reminder_minutes,
-            rawText: text
+            rawText: text,
+            source: 'llm',
           };
         }
-      } catch (error) {
-        console.error('LLM parse error:', error);
-        setLlmError('网络错误，请检查连接');
+
+        // 后端返回了非 LLM 结果（is_complex_command 返回 false），降级到 regex
+        setLlmStatus('idle');
+      } catch (err) {
+        console.error('LLM parse error:', err);
+        setLlmError('LLM 服务连接失败，使用本地解析');
         setLlmStatus('error');
+        // 不返回，继续降级到 regex parser
+      } finally {
+        if (parsingTimer) clearTimeout(parsingTimer);
       }
     }
-    return parseVoiceCommand(text);
+
+    // 降级：使用前端正则解析
+    const regexResult = parseVoiceCommand(text);
+    regexResult.source = 'regex';
+    return regexResult;
   };
 
-  const handleVoiceCommand = useCallback(async (text: string) => {
-    const command = await parseWithHybrid(text);
-    console.log('Parsed command:', command);
+  const handleVoiceCommand = async (text: string) => {
+    console.log('🔊 语音输入:', text);
 
-    // 如果是 LLM 结果，等待用户确认
-    if (llmStatus === 'result' && command.source === 'llm') {
+    const command = await parseWithHybrid(text);
+    console.log('📋 解析结果:', command);
+
+    // LLM 解析的结果需要用户确认后再执行
+    if (command.source === 'llm') {
       setPendingCommand(command);
-      return; // 不立即执行，等待用户确认
+      return;
     }
 
     // 正则解析的结果直接执行
     executeCommand(command);
-  }, [apiKey, llmStatus]);
+  };
+
+  // 用 ref 保存最新的 handleVoiceCommand，避免 effect 依赖问题
+  const handleVoiceCommandRef = useRef(handleVoiceCommand);
+  handleVoiceCommandRef.current = handleVoiceCommand;
 
   const executeCommand = async (command: ParsedCommand) => {
     switch (command.intent) {
@@ -256,16 +278,17 @@ function App() {
     resetTranscript();
   };
 
-  // 确认 LLM 结果
+  // 确认 LLM 解析结果，执行命令
   const handleLLMConfirm = async () => {
     if (pendingCommand) {
       setLlmStatus('idle');
+      setLlmResult(null);
       await executeCommand(pendingCommand);
       setPendingCommand(null);
     }
   };
 
-  // 取消 LLM 结果
+  // 取消 LLM 解析结果
   const handleLLMCancel = () => {
     setLlmStatus('idle');
     setLlmResult(null);
@@ -689,6 +712,7 @@ function App() {
           onCalendarToggle={handleCalendarToggle}
           activeCalendars={activeCalendars}
           isListening={isListening}
+          voiceStatus={speechStatus}
           onVoiceToggle={handleVoiceToggle}
           isSupported={isSupported}
           onQuickAction={handleQuickAction}
@@ -756,6 +780,7 @@ function App() {
         feedback={voiceFeedback}
         error={speechError}
         isSpeaking={isSpeaking}
+        status={speechStatus}
       />
 
       <VoiceLLMFeedback
