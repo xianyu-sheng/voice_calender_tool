@@ -59,10 +59,9 @@ def transcribe_audio(audio_data: bytes, mime_type: str = 'audio/wav') -> Optiona
     """
     import vosk
 
-    model = get_model()
-
     wav_path = None
     try:
+        model = get_model()
         # 写入临时 WAV 文件
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
             tmp.write(audio_data)

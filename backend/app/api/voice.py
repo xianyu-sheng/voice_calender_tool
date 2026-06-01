@@ -51,7 +51,22 @@ def transcribe():
     mime_type = audio_file.content_type or 'audio/webm'
     print(f"[Voice API] 收到音频: {len(audio_data)} bytes, MIME: {mime_type}")
 
-    text = transcribe_audio(audio_data, mime_type)
+    try:
+        text = transcribe_audio(audio_data, mime_type)
+    except FileNotFoundError as e:
+        print(f"[Voice API] 模型文件错误: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'语音模型未找到: {str(e)}'
+        }), 500
+    except Exception as e:
+        print(f"[Voice API] 转录异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'语音识别异常: {str(e)}'
+        }), 500
 
     if text:
         return jsonify({
