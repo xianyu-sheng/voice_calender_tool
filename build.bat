@@ -27,11 +27,17 @@ echo.
 echo [3/4] 打包成exe...
 pyinstaller --onefile --noconsole --name "语音日历工具" ^
     --add-data "frontend/dist;frontend/dist" ^
-    --add-data "app;app" ^
+    --add-data "backend;backend" ^
     --hidden-import "flask" ^
     --hidden-import "flask_cors" ^
     --hidden-import "flask_sqlalchemy" ^
     --hidden-import "sqlalchemy" ^
+    --hidden-import "requests" ^
+    --hidden-import "urllib3" ^
+    --hidden-import "certifi" ^
+    --hidden-import "charset_normalizer" ^
+    --hidden-import "idna" ^
+    --hidden-import "dotenv" ^
     app.py
 
 if errorlevel 1 (
