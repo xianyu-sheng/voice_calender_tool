@@ -1,6 +1,7 @@
-flask>=3.0
-flask-cors>=4.0
-flask-sqlalchemy>=3.1
-requests>=2.30
-python-dotenv>=1.0
-gunicorn>=22.0
+flask==3.0.0
+flask-cors==4.0.0
+flask-sqlalchemy==3.1.1
+pyinstaller==6.3.0
+requests==2.33.1
+python-dotenv==1.0.1
+vosk==0.3.45
