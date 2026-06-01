@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import wave
+import shutil
 import tempfile
 from typing import Optional
 
@@ -14,7 +15,7 @@ from typing import Optional
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # backend/app/services/
 
 if getattr(sys, 'frozen', False):
-    # PyInstaller 打包：模型在 _MEIPASS/vosk-model/ 下
+    # PyInstaller 打包：模型在 _MEIPASS/vosk-model/ 下（路径为 ASCII）
     _MEIPASS = sys._MEIPASS
     MODEL_PATHS = [
         os.path.join(_MEIPASS, 'vosk-model', 'vosk-model-small-cn-0.22'),
@@ -24,18 +25,52 @@ else:
     # 普通 Python 运行：模型在 backend/vosk-model/ 下
     MODEL_PATHS = [
         os.path.join(_BASE_DIR, '..', '..', 'vosk-model', 'vosk-model-small-cn-0.22'),
-        os.path.join(_BASE_DIR, '..', '..', '..', 'vosk-model', 'vosk-model-small-cn-0.22'),
     ]
 
 _vosk_model = None
+_model_ascii_path = None  # 复制到 ASCII 路径后的目录
+
+
+def _is_ascii(s: str) -> bool:
+    """检查字符串是否全为 ASCII 字符"""
+    try:
+        s.encode('ascii')
+        return True
+    except UnicodeEncodeError:
+        return False
 
 
 def _find_model() -> str:
-    """查找 Vosk 模型目录"""
+    """查找 Vosk 模型目录，若路径含中文则复制到临时目录"""
+    global _model_ascii_path
+
+    # 先找原始模型路径
+    original = None
     for p in MODEL_PATHS:
-        if os.path.exists(p) and os.path.isdir(p):
-            return p
-    raise FileNotFoundError(f"Vosk 模型未找到，已搜索:\n" + "\n".join(f"  - {p}" for p in MODEL_PATHS))
+        resolved = os.path.normpath(p)
+        if os.path.exists(resolved) and os.path.isdir(resolved):
+            original = resolved
+            break
+
+    if original is None:
+        searched = "\n".join(f"  - {os.path.normpath(p)}" for p in MODEL_PATHS)
+        raise FileNotFoundError(f"Vosk 模型未找到，已搜索:\n{searched}")
+
+    # 如果路径全是 ASCII，直接使用
+    if _is_ascii(original):
+        return original
+
+    # 路径含中文 → 复制到临时目录（Vosk C 库不支持非 ASCII 路径）
+    dest = os.path.join(tempfile.gettempdir(), 'vosk_model_cache', 'vosk-model-small-cn-0.22')
+
+    if not os.path.exists(dest):
+        print(f"[STT] 路径含中文，复制模型到 ASCII 目录: {dest}")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copytree(original, dest)
+        print("[STT] 模型复制完成")
+
+    _model_ascii_path = dest
+    return dest
 
 
 def get_model():
@@ -44,9 +79,9 @@ def get_model():
     if _vosk_model is None:
         import vosk
         model_path = _find_model()
-        print(f"[STT] 正在加载 Vosk 中文模型... ({model_path})")
+        print(f"[STT] 正在加载 Vosk 中文模型...")
         _vosk_model = vosk.Model(model_path)
-        print("[STT] Vosk 模型加载完成 ✓")
+        print("[STT] Vosk model loaded successfully")
     return _vosk_model
 
 
@@ -110,7 +145,7 @@ def transcribe_audio(audio_data: bytes, mime_type: str = 'audio/wav') -> Optiona
 
             full_text = ' '.join(results).strip()
             if full_text:
-                print(f"[STT] ✓ 识别: {full_text}")
+                print(f"[STT] Recognized: {full_text}")
                 return full_text
             else:
                 print("[STT] 未识别到内容")
