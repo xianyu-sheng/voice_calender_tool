@@ -124,15 +124,15 @@ def parse_with_llm(text: str, api_key: Optional[str] = None) -> Optional[dict]:
     if not api_key:
         return None
 
-    now = datetime.now()
-    system_prompt = SYSTEM_PROMPT.format(
-        current_date=get_date_str(0),
-        tomorrow_date=get_date_str(1),
-        day_after_tomorrow_date=get_date_str(2),
-        current_time=now.strftime("%H:%M")
-    )
-
     try:
+        now = datetime.now()
+        system_prompt = SYSTEM_PROMPT.format(
+            current_date=get_date_str(0),
+            tomorrow_date=get_date_str(1),
+            day_after_tomorrow_date=get_date_str(2),
+            current_time=now.strftime("%H:%M")
+        )
+
         response = requests.post(
             DEEPSEEK_API_URL,
             headers={

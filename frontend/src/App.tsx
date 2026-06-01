@@ -90,6 +90,21 @@ function App() {
     fetchTodos();
     requestPermission();
     autoPostponeTodos();
+
+    // 每次启动时把 localStorage 中的 API key 同步到后端
+    const savedKey = localStorage.getItem('deepseek_api_key');
+    if (savedKey) {
+      console.log('[App] 同步 API key 到后端...');
+      fetch('http://localhost:8000/api/voice/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: savedKey })
+      }).then(r => r.json()).then(d => {
+        console.log('[App] API key 同步结果:', d.success ? 'OK' : 'FAILED');
+      }).catch(e => {
+        console.error('[App] API key 同步失败:', e);
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -215,8 +230,14 @@ function App() {
           };
         }
 
-        // 后端返回了非 LLM 结果（is_complex_command 返回 false），降级到 regex
-        setLlmStatus('idle');
+        // 后端返回了非 LLM 结果，降级到 regex
+        if (data.data?.llm_error) {
+          console.warn('LLM error from backend:', data.data.llm_error);
+          setLlmError('LLM 解析失败: ' + data.data.llm_error + '（使用本地解析）');
+          setLlmStatus('error');
+        } else {
+          setLlmStatus('idle');
+        }
       } catch (err) {
         console.error('LLM parse error:', err);
         setLlmError('LLM 服务连接失败，使用本地解析');
