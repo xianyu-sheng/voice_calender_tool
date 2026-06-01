@@ -4,16 +4,7 @@ echo 语音日历工具 - 打包脚本
 echo ========================================
 echo.
 
-echo [1/4] 安装Python依赖...
-pip install -r requirements.txt
-if errorlevel 1 (
-    echo 依赖安装失败！
-    pause
-    exit /b 1
-)
-
-echo.
-echo [2/4] 构建前端...
+echo [1/3] 构建前端...
 cd frontend
 call npm run build
 if errorlevel 1 (
@@ -24,12 +15,10 @@ if errorlevel 1 (
 cd ..
 
 echo.
-echo [3/4] 打包成exe...
-pyinstaller --onefile --noconsole --name "语音日历工具" ^
+echo [2/3] 打包成exe（使用 Python 3.12 venv）...
+D:\voice_cal_venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --name "语音日历工具" ^
     --add-data "frontend/dist;frontend/dist" ^
     --add-data "backend;backend" ^
-    --add-data "backend/vosk-model/vosk-model-small-cn-0.22;vosk-model/vosk-model-small-cn-0.22" ^
-    --collect-all vosk ^
     --hidden-import "flask" ^
     --hidden-import "flask_cors" ^
     --hidden-import "flask_sqlalchemy" ^
@@ -51,11 +40,11 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/4] 完成！
+echo [3/3] 完成！
 echo.
 echo ========================================
 echo 打包成功！
-echo 可执行文件位置: dist/语音日历工具.exe
+echo 可执行文件位置: dist\语音日历工具.exe
 echo ========================================
 echo.
 pause
