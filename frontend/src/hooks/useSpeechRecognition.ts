@@ -119,11 +119,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
+        console.log('recognition.stop() called');
       } catch (e) {
-        // ignore
+        console.error('stop() error:', e);
       }
     }
-    setIsListening(false);
+    // 注意：不在这里设置 setIsListening(false)
+    // 让 onend 回调来处理状态更新
   }, []);
 
   const resetTranscript = useCallback(() => {

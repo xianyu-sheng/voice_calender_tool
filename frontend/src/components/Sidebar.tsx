@@ -101,10 +101,10 @@ const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
             <span className="voice-text" style={{ fontWeight: isListening ? '700' : '500' }}>
-              {!isSupported ? '❌ 不支持语音' : isListening ? '🔴 请说话...' : '🎤 点击开始语音'}
+              {!isSupported ? '❌ 不支持语音' : isListening ? '🔴 正在录音...' : '🎤 点击开始语音'}
             </span>
             {isListening && (
-              <span className="voice-hint">再次点击结束</span>
+              <span className="voice-hint">说完后点击结束</span>
             )}
           </button>
         </div>
