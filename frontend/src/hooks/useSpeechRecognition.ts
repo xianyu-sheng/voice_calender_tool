@@ -14,10 +14,62 @@ interface SpeechRecognitionHook {
   resetTranscript: () => void;
 }
 
-// 检测浏览器实际是否支持语音识别
-function checkSpeechSupport(): boolean {
+// ============================================================
+// 离线语音识别方案：
+// 前端: getUserMedia + AudioContext → 录制 16kHz mono PCM → 编码为 WAV
+// 后端: Vosk 离线引擎直接读取 WAV → 返回文本
+// 无需任何云服务，无需 ffmpeg，完全离线运行
+// ============================================================
+
+function checkMediaSupport(): boolean {
   return typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+    !!navigator.mediaDevices?.getUserMedia;
+}
+
+/**
+ * 将 Float32 PCM 样本编码为 16-bit PCM WAV 格式
+ */
+function encodeWAV(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  // WAV 文件头
+  function writeString(offset: number, str: string) {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  }
+
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize = samples.length * 2;
+
+  writeString(0, 'RIFF');                          // ChunkID
+  view.setUint32(4, 36 + dataSize, true);           // ChunkSize
+  writeString(8, 'WAVE');                           // Format
+  writeString(12, 'fmt ');                          // Subchunk1ID
+  view.setUint32(16, 16, true);                     // Subchunk1Size (PCM)
+  view.setUint16(20, 1, true);                      // AudioFormat (PCM = 1)
+  view.setUint16(22, numChannels, true);             // NumChannels
+  view.setUint32(24, sampleRate, true);              // SampleRate
+  view.setUint32(28, byteRate, true);                // ByteRate
+  view.setUint16(32, blockAlign, true);              // BlockAlign
+  view.setUint16(34, bitsPerSample, true);           // BitsPerSample
+  writeString(36, 'data');                           // Subchunk2ID
+  view.setUint32(40, dataSize, true);                // Subchunk2Size
+
+  // PCM 数据 (Float32 → Int16)
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    view.setInt16(offset, val, true);
+    offset += 2;
+  }
+
+  return buffer;
 }
 
 export function useSpeechRecognition(): SpeechRecognitionHook {
@@ -26,243 +78,210 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SpeechStatus>('idle');
-  const recognitionRef = useRef<any>(null);
-  const startTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isSupported = checkSpeechSupport();
 
-  // 清理定时器
+  // 音频录制 refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const samplesRef = useRef<Float32Array[]>([]);
+  const totalSamplesRef = useRef(0);
+  const sampleRateRef = useRef(16000);
+  const isRecordingRef = useRef(false);
+
+  const isSupported = checkMediaSupport();
+
+  // 清理
   useEffect(() => {
     return () => {
-      if (startTimeoutRef.current) {
-        clearTimeout(startTimeoutRef.current);
-      }
+      cleanupAudio();
     };
   }, []);
 
-  const startListening = useCallback(() => {
-    console.log('=== startListening called ===');
+  const cleanupAudio = () => {
+    isRecordingRef.current = false;
+    try { scriptNodeRef.current?.disconnect(); } catch (e) { /* ignore */ }
+    try { sourceNodeRef.current?.disconnect(); } catch (e) { /* ignore */ }
+    try { audioContextRef.current?.close(); } catch (e) { /* ignore */ }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
+    }
+    scriptNodeRef.current = null;
+    sourceNodeRef.current = null;
+    audioContextRef.current = null;
+    mediaStreamRef.current = null;
+    samplesRef.current = [];
+    totalSamplesRef.current = 0;
+  };
+
+  const startListening = useCallback(async () => {
+    console.log('=== startListening ===');
+    setTranscript('');
+    setInterimTranscript('');
+    setError(null);
 
     if (!isSupported) {
-      const msg = '您的浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器';
-      setError(msg);
+      setError('您的浏览器不支持麦克风录音');
       setStatus('error');
       return;
     }
 
-    // 清理之前的识别实例
-    if (recognitionRef.current) {
-      console.log('Aborting previous recognition...');
-      try {
-        recognitionRef.current.abort();
-      } catch (e) {
-        // ignore
-      }
-      recognitionRef.current = null;
-    }
+    // 清理之前的录制
+    cleanupAudio();
+    samplesRef.current = [];
+    totalSamplesRef.current = 0;
 
-    // 清理之前的超时
-    if (startTimeoutRef.current) {
-      clearTimeout(startTimeoutRef.current);
-      startTimeoutRef.current = null;
-    }
-
-    // 立即设置状态，给用户视觉反馈
-    setIsListening(true);
-    setTranscript('');
-    setInterimTranscript('');
-    setError(null);
-    setStatus('connecting');  // 连接中状态
-
-    console.log('Creating new SpeechRecognition instance...');
-    const SpeechRecognition = (window as any).SpeechRecognition ||
-                              (window as any).webkitSpeechRecognition;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    let hasStarted = false;
-    let hasTimedOut = false;  // 追踪是否已超时，避免 onend 覆盖 error 状态
-
-    // ⏱ 超时检测：如果 6 秒内 onstart 没有触发，说明语音服务不可达
-    startTimeoutRef.current = setTimeout(() => {
-      if (!hasStarted) {
-        console.error('✗ Speech recognition start TIMEOUT — service unreachable');
-        hasTimedOut = true;
-        setStatus('error');
-        setIsListening(false);
-        setError(
-          '语音服务连接超时。\n' +
-          '可能原因：① 网络无法访问 Google 语音服务（国内用户需使用 VPN 或 Edge 浏览器）；' +
-          '② 麦克风被其他应用占用。\n' +
-          '💡 建议：使用 Microsoft Edge 浏览器（使用 Azure 语音服务，国内可访问）'
-        );
-        try {
-          recognition.abort();
-        } catch (e) {
-          // ignore
-        }
-        recognitionRef.current = null;
-      }
-    }, 6000);
-
-    recognition.onstart = () => {
-      console.log('✓ onstart fired — speech service connected');
-      hasStarted = true;
-      setStatus('listening');  // 切换为正在聆听状态
-
-      // 清除超时
-      if (startTimeoutRef.current) {
-        clearTimeout(startTimeoutRef.current);
-        startTimeoutRef.current = null;
-      }
-    };
-
-    recognition.onaudiostart = () => {
-      console.log('✓ onaudiostart — capturing audio');
-    };
-
-    recognition.onspeechstart = () => {
-      console.log('✓ onspeechstart — speech detected');
-    };
-
-    recognition.onresult = (event: any) => {
-      console.log('✓ onresult fired, results:', event.results.length);
-      let interim = '';
-      let final = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          final += result[0].transcript;
-        } else {
-          interim += result[0].transcript;
-        }
-      }
-
-      if (final) {
-        console.log('✓ Final transcript:', final);
-        setTranscript(prev => prev + final);
-        setInterimTranscript('');
-        setStatus('idle');  // 拿到最终结果，回到空闲
-      } else {
-        setInterimTranscript(interim);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('✗ onerror:', event.error, event.message);
-
-      // 清除超时
-      if (startTimeoutRef.current) {
-        clearTimeout(startTimeoutRef.current);
-        startTimeoutRef.current = null;
-      }
-
-      setIsListening(false);
-      setStatus('error');
-      recognitionRef.current = null;
-
-      // 不把 abort 和 no-speech 当错误
-      if (event.error === 'aborted') {
-        console.log('Recognition aborted (normal)');
-        return;
-      }
-      if (event.error === 'no-speech') {
-        setError('未检测到语音，请再试一次');
-        return;
-      }
-
-      // 网络错误 — 最常见的国内用户问题
-      if (event.error === 'network') {
-        setError(
-          '语音识别网络错误。Google 语音服务在国内可能无法访问。\n' +
-          '💡 请尝试：① 使用 Microsoft Edge 浏览器；② 检查网络连接；③ 使用 VPN'
-        );
-      } else if (event.error === 'not-allowed') {
-        setError('麦克风权限未授予，请在浏览器设置中允许麦克风访问');
-      } else if (event.error === 'audio-capture') {
-        setError('无法访问麦克风，请检查麦克风是否被其他应用占用');
-      } else {
-        setError(`语音识别错误: ${event.error}${event.message ? ' — ' + event.message : ''}`);
-      }
-    };
-
-    recognition.onend = () => {
-      console.log('✓ onend fired');
-
-      // 清除超时
-      if (startTimeoutRef.current) {
-        clearTimeout(startTimeoutRef.current);
-        startTimeoutRef.current = null;
-      }
-
-      setIsListening(false);
-      recognitionRef.current = null;
-      setInterimTranscript('');
-
-      // 超时时不覆盖 error 状态
-      if (hasTimedOut) {
-        return;
-      }
-
-      // 正常结束：回到 idle
-      setStatus('idle');
-    };
-
-    recognitionRef.current = recognition;
+    setStatus('connecting');
 
     try {
-      console.log('Calling recognition.start()...');
-      recognition.start();
-      console.log('recognition.start() called successfully');
+      // 1. 获取麦克风权限
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      });
+      mediaStreamRef.current = stream;
+
+      // 2. 创建 AudioContext（采样率 16000）
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 16000,
+      });
+      audioContextRef.current = audioCtx;
+      sampleRateRef.current = audioCtx.sampleRate;
+      console.log(`AudioContext: sampleRate=${audioCtx.sampleRate}Hz`);
+
+      // 3. 创建音频源
+      const source = audioCtx.createMediaStreamSource(stream);
+      sourceNodeRef.current = source;
+
+      // 4. 创建 ScriptProcessorNode 用于捕获原始 PCM 数据
+      // bufferSize=4096 在 16kHz 下约 256ms 延迟
+      const scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+      scriptNodeRef.current = scriptNode;
+
+      scriptNode.onaudioprocess = (event) => {
+        if (!isRecordingRef.current) return;
+        const inputData = event.inputBuffer.getChannelData(0);
+        // 复制样本数据（Float32Array）
+        const copy = new Float32Array(inputData.length);
+        copy.set(inputData);
+        samplesRef.current.push(copy);
+        totalSamplesRef.current += copy.length;
+
+        // 每 1 秒更新一次 UI 显示录音时长
+        const duration = totalSamplesRef.current / sampleRateRef.current;
+        setInterimTranscript(`🎤 录音中... ${duration.toFixed(1)}秒`);
+      };
+
+      // 5. 连接节点
+      source.connect(scriptNode);
+      scriptNode.connect(audioCtx.destination); // 必须连接才能触发 onaudioprocess
+
+      isRecordingRef.current = true;
+      setIsListening(true);
+      setStatus('listening');
+      console.log('✓ 开始录音 (离线 WAV 模式)');
+
     } catch (err: any) {
-      console.error('start() exception:', err);
-      setIsListening(false);
-      recognitionRef.current = null;
+      console.error('Start error:', err);
       setStatus('error');
+      setIsListening(false);
+      cleanupAudio();
 
-      // 清除超时
-      if (startTimeoutRef.current) {
-        clearTimeout(startTimeoutRef.current);
-        startTimeoutRef.current = null;
-      }
-
-      if (err.name === 'NotAllowedError' || err.message?.includes('not allowed')) {
-        setError('麦克风权限被拒绝。请在浏览器地址栏左侧点击锁图标，允许麦克风访问。');
+      if (err.name === 'NotAllowedError') {
+        setError('麦克风权限被拒绝。请在浏览器地址栏左侧点击锁图标 → 允许麦克风。');
+      } else if (err.name === 'NotFoundError') {
+        setError('未检测到麦克风设备');
       } else {
-        setError(`启动语音识别失败: ${err.message}`);
+        setError(`无法访问麦克风: ${err.message}`);
       }
     }
   }, [isSupported]);
 
   const stopListening = useCallback(() => {
-    console.log('=== stopListening called ===');
+    console.log('=== stopListening ===');
+    console.log(`共录制 ${totalSamplesRef.current} 个样本, ${(totalSamplesRef.current / sampleRateRef.current).toFixed(1)} 秒`);
 
-    // 清除启动超时
-    if (startTimeoutRef.current) {
-      clearTimeout(startTimeoutRef.current);
-      startTimeoutRef.current = null;
+    isRecordingRef.current = false;
+    setIsListening(false);
+
+    // 停止音频捕获
+    try { scriptNodeRef.current?.disconnect(); } catch (e) { /* ignore */ }
+    try { sourceNodeRef.current?.disconnect(); } catch (e) { /* ignore */ }
+    try { audioContextRef.current?.close(); } catch (e) { /* ignore */ }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
     }
+    scriptNodeRef.current = null;
+    sourceNodeRef.current = null;
+    audioContextRef.current = null;
+    mediaStreamRef.current = null;
 
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-        console.log('recognition.stop() called');
-      } catch (e) {
-        console.error('stop() error:', e);
-      }
+    // 发送音频到后端识别
+    if (samplesRef.current.length > 0 && totalSamplesRef.current > 0) {
+      sendAudioForTranscription();
     } else {
-      // 没有活跃的识别实例，直接重置状态
-      setIsListening(false);
-      setStatus('idle');
       setInterimTranscript('');
+      setStatus('idle');
+      setError('没有录到声音，请检查麦克风');
     }
-    // 注意：不在这里设置 setIsListening(false)
-    // 让 onend 回调来处理状态更新
   }, []);
+
+  const sendAudioForTranscription = async () => {
+    setStatus('connecting');
+    setInterimTranscript('正在识别语音...');
+
+    try {
+      // 合并所有样本数据
+      const allSamples = new Float32Array(totalSamplesRef.current);
+      let offset = 0;
+      for (const chunk of samplesRef.current) {
+        allSamples.set(chunk, offset);
+        offset += chunk.length;
+      }
+      samplesRef.current = [];
+      totalSamplesRef.current = 0;
+
+      // 编码为 WAV
+      const wavBuffer = encodeWAV(allSamples, sampleRateRef.current);
+      const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+
+      console.log(`发送 WAV: ${wavBlob.size} bytes, ${allSamples.length} samples @ ${sampleRateRef.current}Hz`);
+
+      // 发送到后端
+      const formData = new FormData();
+      formData.append('audio', wavBlob, 'recording.wav');
+
+      const response = await fetch('http://localhost:8000/api/voice/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data?.text) {
+        const text = data.data.text;
+        console.log('✓ 识别结果:', text);
+        setInterimTranscript('');
+        setTranscript(text);
+        setStatus('idle');
+      } else {
+        const errMsg = data.error || '语音识别失败';
+        console.error('✗ 识别失败:', errMsg);
+        setInterimTranscript('');
+        setStatus('error');
+        setError(errMsg);
+      }
+    } catch (err: any) {
+      console.error('✗ 网络错误:', err);
+      setInterimTranscript('');
+      setStatus('error');
+      setError('连接后端服务失败，请确认后端已启动 (端口 8000)');
+    }
+  };
 
   const resetTranscript = useCallback(() => {
     setTranscript('');
