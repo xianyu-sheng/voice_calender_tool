@@ -94,7 +94,7 @@ def parse_voice():
 
     effective_key = API_KEY or os.environ.get("DEEPSEEK_API_KEY", "")
 
-    if use_llm and effective_key and is_complex_command(text):
+    if use_llm and effective_key:  # 只要有 API key 就用 LLM，不做复杂度判断
         result = parse_with_llm(text, effective_key)
         if result:
             result['source'] = 'llm'

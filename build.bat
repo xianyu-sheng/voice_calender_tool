@@ -29,6 +29,7 @@ pyinstaller --onefile --noconsole --name "语音日历工具" ^
     --add-data "frontend/dist;frontend/dist" ^
     --add-data "backend;backend" ^
     --add-data "backend/vosk-model/vosk-model-small-cn-0.22;vosk-model/vosk-model-small-cn-0.22" ^
+    --collect-all vosk ^
     --hidden-import "flask" ^
     --hidden-import "flask_cors" ^
     --hidden-import "flask_sqlalchemy" ^
@@ -39,8 +40,6 @@ pyinstaller --onefile --noconsole --name "语音日历工具" ^
     --hidden-import "charset_normalizer" ^
     --hidden-import "idna" ^
     --hidden-import "dotenv" ^
-    --hidden-import "vosk" ^
-    --hidden-import "cffi" ^
     --hidden-import "json" ^
     --hidden-import "wave" ^
     app.py
