@@ -1,163 +1,136 @@
 """
-离线语音识别服务 — 基于 Vosk
-接收 WAV 格式音频 (16kHz, 16bit, mono)，返回识别文本
-完全离线运行，无需网络连接
+语音识别服务 — 使用百度语音识别 API
+纯 HTTP REST 接口，无需任何本地 C++ 库
+免费额度: 50,000次/天，中文识别精度极高
 """
 import os
 import sys
 import json
-import wave
-import shutil
+import base64
+import requests
 import tempfile
+import wave
 from typing import Optional
 
-# 模型路径：兼容普通 Python 运行和 PyInstaller 打包两种场景
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # backend/app/services/
+# 百度 API 配置
+BAIDU_TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
+BAIDU_STT_URL = "https://vop.baidu.com/server_api"
 
-if getattr(sys, 'frozen', False):
-    # PyInstaller 打包：模型在 _MEIPASS/vosk-model/ 下（路径为 ASCII）
-    _MEIPASS = sys._MEIPASS
-    MODEL_PATHS = [
-        os.path.join(_MEIPASS, 'vosk-model', 'vosk-model-small-cn-0.22'),
-        os.path.join(_MEIPASS, 'backend', 'vosk-model', 'vosk-model-small-cn-0.22'),
-    ]
-else:
-    # 普通 Python 运行：模型在 backend/vosk-model/ 下
-    MODEL_PATHS = [
-        os.path.join(_BASE_DIR, '..', '..', 'vosk-model', 'vosk-model-small-cn-0.22'),
-    ]
+# API 凭据（可通过 settings 设置）
+BAIDU_API_KEY = ""
+BAIDU_SECRET_KEY = ""
 
-_vosk_model = None
-_model_ascii_path = None  # 复制到 ASCII 路径后的目录
+_access_token = None
+_token_expires = 0
 
 
-def _is_ascii(s: str) -> bool:
-    """检查字符串是否全为 ASCII 字符"""
+def get_access_token() -> Optional[str]:
+    """获取百度 API access token（自动缓存和刷新）"""
+    global _access_token, _token_expires
+    import time
+
+    if _access_token and time.time() < _token_expires - 60:
+        return _access_token
+
+    key = BAIDU_API_KEY or os.environ.get("BAIDU_STT_API_KEY", "")
+    secret = BAIDU_SECRET_KEY or os.environ.get("BAIDU_STT_SECRET_KEY", "")
+
+    if not key or not secret:
+        print("[STT] Baidu API key not configured")
+        return None
+
     try:
-        s.encode('ascii')
-        return True
-    except UnicodeEncodeError:
-        return False
-
-
-def _find_model() -> str:
-    """查找 Vosk 模型目录，若路径含中文则复制到临时目录"""
-    global _model_ascii_path
-
-    # 先找原始模型路径
-    original = None
-    for p in MODEL_PATHS:
-        resolved = os.path.normpath(p)
-        if os.path.exists(resolved) and os.path.isdir(resolved):
-            original = resolved
-            break
-
-    if original is None:
-        searched = "\n".join(f"  - {os.path.normpath(p)}" for p in MODEL_PATHS)
-        raise FileNotFoundError(f"Vosk 模型未找到，已搜索:\n{searched}")
-
-    # 如果路径全是 ASCII，直接使用
-    if _is_ascii(original):
-        return original
-
-    # 路径含中文 → 复制到临时目录（Vosk C 库不支持非 ASCII 路径）
-    dest = os.path.join(tempfile.gettempdir(), 'vosk_model_cache', 'vosk-model-small-cn-0.22')
-
-    if not os.path.exists(dest):
-        print(f"[STT] 路径含中文，复制模型到 ASCII 目录: {dest}")
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        shutil.copytree(original, dest)
-        print("[STT] 模型复制完成")
-
-    _model_ascii_path = dest
-    return dest
-
-
-def get_model():
-    """延迟加载 Vosk 模型（首次使用时加载，约需 2-5 秒）"""
-    global _vosk_model
-    if _vosk_model is None:
-        import vosk
-        model_path = _find_model()
-        print(f"[STT] 正在加载 Vosk 中文模型...")
-        _vosk_model = vosk.Model(model_path)
-        print("[STT] Vosk model loaded successfully")
-    return _vosk_model
+        resp = requests.post(
+            BAIDU_TOKEN_URL,
+            params={
+                "grant_type": "client_credentials",
+                "client_id": key,
+                "client_secret": secret
+            },
+            timeout=10
+        )
+        data = resp.json()
+        _access_token = data.get("access_token")
+        expires_in = data.get("expires_in", 86400)
+        _token_expires = time.time() + expires_in
+        print(f"[STT] Baidu token obtained, expires in {expires_in}s")
+        return _access_token
+    except Exception as e:
+        print(f"[STT] Failed to get Baidu token: {e}")
+        return None
 
 
 def transcribe_audio(audio_data: bytes, mime_type: str = 'audio/wav') -> Optional[str]:
-    """
-    将 WAV 音频转录为文本
-    audio_data: WAV 格式音频字节 (16kHz, 16bit, mono PCM)
-    mime_type: 音频 MIME 类型
-    返回: 转录文本，失败返回 None
-    """
-    import vosk
+    """使用百度语音识别 API 将音频转录为文本"""
+    token = get_access_token()
+    if not token:
+        print("[STT] No Baidu token available — STT unavailable")
+        return None
 
+    # 验证和准备音频
     wav_path = None
     try:
-        model = get_model()
-        # 写入临时 WAV 文件
+        # 写入临时 WAV 文件，检查音频有效性
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
             tmp.write(audio_data)
             wav_path = tmp.name
 
-        if os.path.getsize(wav_path) == 0:
-            print("[STT] 音频文件为空")
+        if os.path.getsize(wav_path) < 100:
+            print("[STT] Audio file too small")
             return None
 
-        # 验证 WAV 格式
+        # 检查 WAV 格式
         try:
             wf = wave.open(wav_path, 'rb')
-            channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
             framerate = wf.getframerate()
             nframes = wf.getnframes()
+            channels = wf.getnchannels()
             duration = nframes / max(framerate, 1)
-            print(f"[STT] 音频: {framerate}Hz, {channels}ch, {sampwidth*8}bit, {duration:.1f}s, {nframes} frames")
-
-            if nframes == 0 or duration < 0.3:
-                print("[STT] 音频太短")
-                wf.close()
-                return None
-
-            # 使用更高精度参数: beam=13, max-active=7000
-            recognizer = vosk.KaldiRecognizer(model, framerate, '{"beam": 13, "max-active": 7000}')
-            recognizer.SetWords(True)  # 启用词级输出有助于调试
-
-            results = []
-            while True:
-                data = wf.readframes(4000)
-                if len(data) == 0:
-                    break
-                if recognizer.AcceptWaveform(data):
-                    result = json.loads(recognizer.Result())
-                    text = result.get('text', '').strip()
-                    if text:
-                        results.append(text)
-
-            # 获取最后部分
-            final = json.loads(recognizer.FinalResult())
-            text = final.get('text', '').strip()
-            if text:
-                results.append(text)
-
             wf.close()
+            print(f"[STT] Audio: {framerate}Hz, {channels}ch, {duration:.1f}s [{nframes} frames]")
 
-            full_text = ' '.join(results).strip()
-            if full_text:
-                print(f"[STT] Recognized: {full_text}")
-                return full_text
-            else:
-                print("[STT] 未识别到内容")
+            if duration < 0.3:
+                print("[STT] Audio too short")
                 return None
-
+            if duration > 60:
+                print("[STT] Audio too long (>60s), truncating not supported")
+                # 百度免费版限制 60 秒
         except wave.Error as e:
-            print(f"[STT] 无效的 WAV 文件: {e}")
+            print(f"[STT] Invalid WAV: {e}")
+            return None
+
+        # 读取音频并 Base64 编码
+        with open(wav_path, 'rb') as f:
+            audio_b64 = base64.b64encode(f.read()).decode('utf-8')
+
+        # 调用百度语音识别 API
+        payload = {
+            "format": "pcm",
+            "rate": framerate,
+            "channel": channels,
+            "cuid": "voice_calendar_tool",
+            "token": token,
+            "speech": audio_b64,
+            "len": os.path.getsize(wav_path),
+            "dev_pid": 1537,  # 普通话(纯中文识别)
+        }
+
+        print(f"[STT] Calling Baidu STT API (audio: {os.path.getsize(wav_path)} bytes)...")
+        resp = requests.post(BAIDU_STT_URL, json=payload, timeout=30)
+        result = resp.json()
+
+        if result.get("err_no") == 0:
+            text = ' '.join(result.get("result", []))
+            print(f"[STT] Recognized: {text}")
+            return text
+        else:
+            err_msg = result.get("err_msg", "Unknown error")
+            err_no = result.get("err_no", -1)
+            print(f"[STT] Baidu API error: [{err_no}] {err_msg}")
             return None
 
     except Exception as e:
-        print(f"[STT] 转录错误: {e}")
+        print(f"[STT] Error: {e}")
         import traceback
         traceback.print_exc()
         return None

@@ -1,19 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
-
-datas = [('frontend/dist', 'frontend/dist'), ('backend', 'backend'), ('backend/vosk-model/vosk-model-small-cn-0.22', 'vosk-model/vosk-model-small-cn-0.22')]
-binaries = []
-hiddenimports = ['flask', 'flask_cors', 'flask_sqlalchemy', 'sqlalchemy', 'requests', 'urllib3', 'certifi', 'charset_normalizer', 'idna', 'dotenv', 'json', 'wave']
-tmp_ret = collect_all('vosk')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=[],
+    datas=[('frontend/dist', 'frontend/dist'), ('backend', 'backend')],
+    hiddenimports=['flask', 'flask_cors', 'flask_sqlalchemy', 'sqlalchemy', 'requests', 'urllib3', 'certifi', 'charset_normalizer', 'idna', 'dotenv', 'json', 'wave'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

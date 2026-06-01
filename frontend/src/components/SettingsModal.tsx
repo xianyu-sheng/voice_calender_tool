@@ -1,29 +1,43 @@
 import React, { useState, useEffect } from 'react';
 
+interface VoiceConfig {
+  deepseekApiKey: string;
+  baiduSttApiKey: string;
+  baiduSttSecretKey: string;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (apiKey: string) => void;
-  currentApiKey: string;
+  onSave: (config: VoiceConfig) => void;
+  currentConfig: VoiceConfig;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   onSave,
-  currentApiKey
+  currentConfig
 }) => {
-  const [apiKey, setApiKey] = useState('');
+  const [deepseekKey, setDeepseekKey] = useState('');
+  const [baiduApiKey, setBaiduApiKey] = useState('');
+  const [baiduSecretKey, setBaiduSecretKey] = useState('');
   const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      setApiKey(currentApiKey);
+      setDeepseekKey(currentConfig.deepseekApiKey);
+      setBaiduApiKey(currentConfig.baiduSttApiKey);
+      setBaiduSecretKey(currentConfig.baiduSttSecretKey);
     }
-  }, [isOpen, currentApiKey]);
+  }, [isOpen, currentConfig]);
 
   const handleSave = () => {
-    onSave(apiKey);
+    onSave({
+      deepseekApiKey: deepseekKey,
+      baiduSttApiKey: baiduApiKey,
+      baiduSttSecretKey: baiduSecretKey,
+    });
     onClose();
   };
 
@@ -42,42 +56,77 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="settings-form">
+          {/* Speech Recognition */}
           <div className="settings-info">
-            <div className="info-icon">🤖</div>
+            <div className="info-icon">🎤</div>
             <div className="info-text">
-              <h3>智能语音解析</h3>
-              <p>接入 DeepSeek 大模型，支持更自然的语音指令理解。</p>
-              <p>例如：帮我安排下周三和产品组的评审会议，需要准备PPT</p>
+              <h3>语音识别（必填）</h3>
+              <p>使用百度语音识别 API 将语音转为文字。</p>
+              <p>免费额度: 50,000次/天，中文识别精准</p>
             </div>
           </div>
 
           <div className="form-group">
-            <label>DeepSeek API Key</label>
+            <label>百度 API Key</label>
             <div className="api-key-input">
               <input
                 type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-..."
+                value={baiduApiKey}
+                onChange={e => setBaiduApiKey(e.target.value)}
+                placeholder="百度语音识别 API Key"
               />
-              <button
-                className="btn-toggle-visibility"
-                onClick={() => setShowKey(!showKey)}
-              >
+              <button className="btn-toggle-visibility" onClick={() => setShowKey(!showKey)}>
                 {showKey ? '🙈' : '👁️'}
               </button>
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>百度 Secret Key</label>
+            <div className="api-key-input">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={baiduSecretKey}
+                onChange={e => setBaiduSecretKey(e.target.value)}
+                placeholder="百度语音识别 Secret Key"
+              />
+            </div>
             <p className="form-hint">
-              获取 API Key: <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>
+              免费获取: <a href="https://ai.baidu.com/tech/speech" target="_blank" rel="noopener noreferrer">ai.baidu.com/tech/speech</a> → 创建应用 → 领取免费额度
+            </p>
+          </div>
+
+          <div className="sidebar-divider" style={{ margin: '16px 0' }}></div>
+
+          {/* LLM Parsing */}
+          <div className="settings-info">
+            <div className="info-icon">🤖</div>
+            <div className="info-text">
+              <h3>智能语义解析（可选）</h3>
+              <p>接入 DeepSeek 大模型，智能提取任务标题、时间、地点等。</p>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>DeepSeek API Key（可选）</label>
+            <div className="api-key-input">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={deepseekKey}
+                onChange={e => setDeepseekKey(e.target.value)}
+                placeholder="sk-..."
+              />
+            </div>
+            <p className="form-hint">
+              获取: <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>
+              （不填则使用本地解析）
             </p>
           </div>
 
           <div className="settings-note">
-            <p><strong>混合解析模式：</strong></p>
             <ul>
-              <li>简单指令（如"创建事件：开会"）→ 本地正则解析（快速）</li>
-              <li>复杂指令（如"帮我安排..."）→ 大模型解析（准确）</li>
-              <li>不填 API Key 也可正常使用基础语音功能</li>
+              <li>🎤 百度 API → 语音转文字（需要联网）</li>
+              <li>🤖 DeepSeek → 语义解析，提取任务信息（可选，需要联网）</li>
             </ul>
           </div>
 
