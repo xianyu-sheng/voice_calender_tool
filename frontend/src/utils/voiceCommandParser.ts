@@ -262,26 +262,39 @@ function extractPriority(text: string): 'low' | 'medium' | 'high' | undefined {
 function extractTitle(text: string, intent: string): string {
   let title = text;
 
+  // 第一轮：去掉填充词/礼貌用语（LLM 能处理得更好，这里是 fallback）
+  const fillerPatterns = [
+    /你好|您好|嗨|哈喽|请|帮我|麻烦|谢谢|拜托|辛苦了/g,
+    /我想|我要|我需要|能不能|可以|给我|帮我|来一个/g,
+    /一下|吧|吗|呢|啊|哦|嗯|那个|这个|就是|然后|所以/g,
+    /那个什么|就是那个/g,
+  ];
+  for (const pattern of fillerPatterns) {
+    title = title.replace(pattern, '');
+  }
+
+  // 第二轮：去掉关键词/动作词
   const commonPatterns = [
-    /创建|新建|添加|一个|的/,
-    /删除|移除|取消|完成|做完|搞定|标记|勾选/,
-    /查看|看看|显示|有什么/,
-    /任务|待办|事件|日程|会议|安排/,
-    /明天|今天|后天|下周[一二三四五六日天]/,
-    /上午|下午|晚上|早上/,
-    /\d+[点时]\d*分?/,
-    /[一二三四五六七八九十]+点/,
-    /在(.+)/,
-    /我(需要|要)(做|完成|处理)/,
-    /记(下|住)/,
-    /高优先|重要|紧急|急|中优先|一般|低优先|不急|慢慢/,
+    /创建|新建|添加|一个|的/g,
+    /删除|移除|取消|完成|做完|搞定|标记|勾选/g,
+    /查看|看看|显示|有什么/g,
+    /任务|待办|事件|日程|会议|安排/g,
+    /明天|今天|后天|下周[一二三四五六日天]/g,
+    /上午|下午|晚上|早上/g,
+    /\d+[点时]\d*分?/g,
+    /[一二三四五六七八九十]+点/g,
+    /在(.+)/g,
+    /我(需要|要)(做|完成|处理)/g,
+    /记(下|住)/g,
+    /高优先|重要|紧急|急|中优先|一般|低优先|不急|慢慢/g,
   ];
 
   for (const pattern of commonPatterns) {
     title = title.replace(pattern, '');
   }
 
-  title = title.trim();
+  // 清理多余空格和标点
+  title = title.replace(/\s+/g, ' ').replace(/[,，。！!？?、；;：:]/g, '').trim();
 
   if (!title || title.length === 0) {
     if (intent.includes('todo')) {

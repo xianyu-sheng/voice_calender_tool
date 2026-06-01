@@ -121,8 +121,9 @@ def transcribe_audio(audio_data: bytes, mime_type: str = 'audio/wav') -> Optiona
                 wf.close()
                 return None
 
-            recognizer = vosk.KaldiRecognizer(model, framerate)
-            recognizer.SetWords(False)
+            # 使用更高精度参数: beam=13, max-active=7000
+            recognizer = vosk.KaldiRecognizer(model, framerate, '{"beam": 13, "max-active": 7000}')
+            recognizer.SetWords(True)  # 启用词级输出有助于调试
 
             results = []
             while True:
