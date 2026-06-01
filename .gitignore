@@ -56,3 +56,4 @@ temp_audio/
 # Video script (local only)
 视频讲解脚本.md
 backend/vosk-model/
+whisper-models/
