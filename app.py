@@ -5,8 +5,12 @@ import threading
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
+# 判断运行环境
+IS_RAILWAY = os.environ.get('RAILWAY_ENVIRONMENT') == 'true'
+IS_FROZEN = getattr(sys, 'frozen', False)
+
 def get_base_path():
-    if getattr(sys, 'frozen', False):
+    if IS_FROZEN:
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -18,12 +22,21 @@ from app import db
 from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp
 
 app = Flask(__name__, static_folder=os.path.join(base_path, 'frontend', 'dist'))
-CORS(app)
 
-# 使用绝对路径确保数据库始终在同一位置
-db_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])) if getattr(sys, 'frozen', False) else base_path, 'instance')
-os.makedirs(db_dir, exist_ok=True)
-db_path = os.path.join(db_dir, 'calendar.db')
+# Railway 云端：允许所有来源；本地：允许 localhost
+if IS_RAILWAY:
+    CORS(app, origins='*')
+else:
+    CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000", "http://127.0.0.1:8000"])
+
+# 数据库路径：Railway 用持久化卷，本地用 instance 目录
+if IS_RAILWAY:
+    db_path = '/data/calendar.db'
+else:
+    db_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])) if IS_FROZEN else base_path, 'instance')
+    os.makedirs(db_dir, exist_ok=True)
+    db_path = os.path.join(db_dir, 'calendar.db')
+
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -79,6 +92,7 @@ def open_browser():
     webbrowser.open('http://localhost:8000')
 
 if __name__ == '__main__':
-    if getattr(sys, 'frozen', False):
+    if IS_FROZEN:
         threading.Timer(1.5, open_browser).start()
-    app.run(debug=False, host='0.0.0.0', port=8000)
+    port = int(os.environ.get('PORT', 8000))
+    app.run(debug=False, host='0.0.0.0', port=port)
