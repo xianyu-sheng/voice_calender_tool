@@ -35,6 +35,7 @@ D:\voice_cal_venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --name
     --hidden-import "dotenv" ^
     --hidden-import "json" ^
     --hidden-import "wave" ^
+    --hidden-import "urllib.request" ^
     desktop_app.py
 
 if errorlevel 1 (

@@ -2,6 +2,8 @@ import importlib
 import os
 import sys
 import threading
+import time
+import urllib.request
 import webbrowser
 
 from flask import Flask, jsonify, send_from_directory
@@ -93,11 +95,36 @@ def health_check():
     return jsonify({"status": "healthy"})
 
 
+APP_URL = "http://127.0.0.1:8000"
+HEALTH_URL = f"{APP_URL}/api/health"
+
+
+def is_existing_app_running():
+    try:
+        with urllib.request.urlopen(HEALTH_URL, timeout=1) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
 def open_browser():
-    webbrowser.open("http://localhost:8000")
+    webbrowser.open(APP_URL)
+
+
+def open_browser_when_ready():
+    for _ in range(20):
+        if is_existing_app_running():
+            open_browser()
+            return
+        time.sleep(0.25)
+    open_browser()
 
 
 if __name__ == "__main__":
+    if is_existing_app_running():
+        open_browser()
+        sys.exit(0)
+
     if getattr(sys, "frozen", False):
-        threading.Timer(1.5, open_browser).start()
+        threading.Thread(target=open_browser_when_ready, daemon=True).start()
     flask_app.run(debug=False, host="0.0.0.0", port=8000)
