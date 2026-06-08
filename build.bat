@@ -17,6 +17,8 @@ cd ..
 echo.
 echo [2/3] 打包成exe（使用 Python 3.12 venv）...
 D:\voice_cal_venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --name "语音日历工具" ^
+    --clean ^
+    --paths "backend" ^
     --add-data "frontend/dist;frontend/dist" ^
     --add-data "backend;backend" ^
     --collect-binaries "vosk" ^
@@ -33,7 +35,7 @@ D:\voice_cal_venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --name
     --hidden-import "dotenv" ^
     --hidden-import "json" ^
     --hidden-import "wave" ^
-    app.py
+    desktop_app.py
 
 if errorlevel 1 (
     echo 打包失败！

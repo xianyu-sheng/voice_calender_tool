@@ -5,13 +5,12 @@ from PyInstaller.utils.hooks import collect_dynamic_libs
 block_cipher = None
 
 a = Analysis(
-    ['app.py'],
-    pathex=[],
+    ['desktop_app.py'],
+    pathex=['backend'],
     binaries=collect_dynamic_libs('vosk'),
     datas=[
         ('frontend/dist', 'frontend/dist'),
-        ('backend/app', 'backend/app'),
-        ('backend/vosk-model', 'backend/vosk-model'),
+        ('backend', 'backend'),
     ],
     hiddenimports=[
         'flask',
