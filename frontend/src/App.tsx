@@ -258,19 +258,40 @@ function App() {
     return regexResult;
   };
 
+  const commandNeedsConfirmation = (command: ParsedCommand) => {
+    return ['create_event', 'create_todo', 'complete_todo', 'delete_event', 'delete_todo'].includes(command.intent);
+  };
+
+  const showCommandConfirmation = (command: ParsedCommand) => {
+    setPendingCommand(command);
+    setLlmRawText(command.rawText);
+    setLlmError('');
+    setLlmResult({
+      intent: command.intent,
+      title: command.title,
+      date: command.date,
+      time: command.time,
+      end_time: command.end_time,
+      location: command.location,
+      description: command.description,
+      priority: command.priority,
+      reminder_minutes: command.reminderMinutes,
+      source: command.source,
+    });
+    setLlmStatus('result');
+  };
+
   const handleVoiceCommand = async (text: string) => {
     console.log('🔊 语音输入:', text);
 
     const command = await parseWithHybrid(text);
     console.log('📋 解析结果:', command);
 
-    // LLM 解析的结果需要用户确认后再执行
-    if (command.source === 'llm') {
-      setPendingCommand(command);
+    if (commandNeedsConfirmation(command)) {
+      showCommandConfirmation(command);
       return;
     }
 
-    // 正则解析的结果直接执行
     executeCommand(command);
   };
 

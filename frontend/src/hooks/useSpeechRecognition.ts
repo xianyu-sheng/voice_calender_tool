@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { normalizeSpeechText } from '../utils/speechText';
 
 export type SpeechStatus = 'idle' | 'connecting' | 'listening' | 'error';
 
@@ -263,7 +264,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       const data = await response.json();
 
       if (data.success && data.data?.text) {
-        const text = data.data.text;
+        const text = normalizeSpeechText(data.data.text);
         console.log('✓ 识别结果:', text);
         setInterimTranscript('');
         setTranscript(text);

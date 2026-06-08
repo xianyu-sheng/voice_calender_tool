@@ -1,7 +1,7 @@
 import os
 from flask import Blueprint, request, jsonify
 from ..services.llm_service import parse_with_llm
-from ..services.stt_service import get_model_path, transcribe_audio
+from ..services.stt_service import get_model_path, normalize_recognized_text, transcribe_audio
 
 voice_bp = Blueprint('voice', __name__)
 
@@ -101,7 +101,7 @@ def parse_voice():
     if not data or 'text' not in data:
         return jsonify({'success': False, 'error': 'Missing text'}), 400
 
-    text = data['text']
+    text = normalize_recognized_text(data['text'])
     use_llm = data.get('use_llm', True)
 
     effective_key = API_KEY or os.environ.get("DEEPSEEK_API_KEY", "")

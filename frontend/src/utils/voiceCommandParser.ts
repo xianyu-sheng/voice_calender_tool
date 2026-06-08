@@ -1,4 +1,5 @@
 import { toLocalDateStr } from './dateUtils';
+import { normalizeSpeechText } from './speechText';
 
 export interface ParsedCommand {
   intent: 'create_event' | 'delete_event' | 'view_events' | 'edit_event' | 'set_reminder' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'view_todos' | 'unknown';
@@ -53,6 +54,9 @@ const INTENT_PATTERNS = {
     /新建(一个)?(.*)待办/,
     /我(需要|要)(做|完成|处理)(.*)/,
     /记(下|住)(.*)/,
+    /把(.+)(修改|改|整理|处理|提交|复习|准备|完成)/,
+    /将(.+)(修改|改|整理|处理|提交|复习|准备|完成)/,
+    /(修改|改|整理|处理|提交|复习|准备|完成)(.+)/,
     /(.*)(任务|待办|todo)/,
   ],
   complete_todo: [
@@ -110,6 +114,8 @@ const PRIORITY_PATTERNS = {
   medium: /中优先|一般/,
   low: /低优先|不急|慢慢/,
 };
+
+const TITLE_ACTIONS = '修改|改|整理|处理|提交|复习|准备|完成';
 
 const CHINESE_NUMBER_MAP: { [key: string]: number } = {
   '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
@@ -285,7 +291,7 @@ function extractPriority(text: string): 'low' | 'medium' | 'high' | undefined {
 }
 
 function extractTitle(text: string, intent: string): string {
-  let title = text;
+  let title = normalizeSpeechText(text);
 
   // 第一轮：去掉填充词/礼貌用语（LLM 能处理得更好，这里是 fallback）
   const fillerPatterns = [
@@ -297,6 +303,10 @@ function extractTitle(text: string, intent: string): string {
   for (const pattern of fillerPatterns) {
     title = title.replace(pattern, '');
   }
+
+  title = title
+    .replace(new RegExp(`^把(.+?)(${TITLE_ACTIONS})(一下)?$`), '$2$1')
+    .replace(new RegExp(`^将(.+?)(${TITLE_ACTIONS})(一下)?$`), '$2$1');
 
   // 第二轮：去掉关键词/动作词
   const commonPatterns = [
@@ -311,6 +321,7 @@ function extractTitle(text: string, intent: string): string {
     /在(.+)/g,
     /我(需要|要)(做|完成|处理)/g,
     /记(下|住)/g,
+    /把|将/g,
     /高优先|重要|紧急|急|中优先|一般|低优先|不急|慢慢/g,
   ];
 
@@ -320,6 +331,7 @@ function extractTitle(text: string, intent: string): string {
 
   // 清理多余空格和标点
   title = title.replace(/\s+/g, ' ').replace(/[,，。！!？?、；;：:]/g, '').trim();
+  title = title.replace(new RegExp(`^(.+?)(${TITLE_ACTIONS})$`), '$2$1');
 
   if (!title || title.length === 0) {
     if (intent.includes('todo')) {
@@ -341,13 +353,13 @@ function extractLocation(text: string): string | undefined {
 }
 
 export function parseVoiceCommand(text: string): ParsedCommand {
-  const normalizedText = text.trim().toLowerCase();
+  const normalizedText = normalizeSpeechText(text);
 
   for (const [intent, patterns] of Object.entries(INTENT_PATTERNS)) {
     for (const pattern of patterns) {
       if (pattern.test(normalizedText)) {
         const { date, time, end_time, reminderMinutes } = extractTime(normalizedText);
-        const title = extractTitle(text, intent);
+        const title = extractTitle(normalizedText, intent);
         const location = extractLocation(normalizedText);
         const priority = extractPriority(normalizedText);
 
@@ -360,7 +372,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
           location,
           reminderMinutes,
           priority,
-          rawText: text,
+          rawText: normalizedText,
         };
       }
     }
@@ -368,7 +380,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
 
   const { date, time, end_time, reminderMinutes } = extractTime(normalizedText);
   if (date || time) {
-    const title = extractTitle(text, 'create_event');
+    const title = extractTitle(normalizedText, 'create_event');
     return {
       intent: 'create_event',
       title,
@@ -378,12 +390,12 @@ export function parseVoiceCommand(text: string): ParsedCommand {
       location: extractLocation(normalizedText),
       reminderMinutes,
       priority: extractPriority(normalizedText),
-      rawText: text,
+      rawText: normalizedText,
     };
   }
 
   return {
     intent: 'unknown',
-    rawText: text,
+    rawText: normalizedText,
   };
 }

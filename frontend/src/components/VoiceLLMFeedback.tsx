@@ -11,6 +11,7 @@ interface LLMResult {
   description?: string;
   priority?: string;
   reminder_minutes?: number;
+  source?: string;
 }
 
 interface VoiceLLMFeedbackProps {
@@ -49,6 +50,26 @@ const VoiceLLMFeedback: React.FC<VoiceLLMFeedbackProps> = ({
       case 'medium': return '🟡 中优先级';
       case 'low': return '🟢 低优先级';
       default: return '中优先级';
+    }
+  };
+
+  const getResultTitle = () => {
+    if (result?.source === 'llm') return 'AI 分析完成';
+    return '离线解析完成';
+  };
+
+  const getConfirmLabel = (intent?: string) => {
+    switch (intent) {
+      case 'create_event':
+      case 'create_todo':
+        return '✓ 确认创建';
+      case 'complete_todo':
+        return '✓ 确认完成';
+      case 'delete_event':
+      case 'delete_todo':
+        return '✓ 确认删除';
+      default:
+        return '✓ 确认执行';
     }
   };
 
@@ -137,8 +158,8 @@ const VoiceLLMFeedback: React.FC<VoiceLLMFeedbackProps> = ({
       {status === 'result' && result && (
         <div className="llm-card llm-result">
           <div className="llm-header">
-            <span className="llm-icon">✨</span>
-            <span className="llm-title">AI 分析完成</span>
+            <span className="llm-icon">{result.source === 'llm' ? '✨' : '✓'}</span>
+            <span className="llm-title">{getResultTitle()}</span>
           </div>
           <div className="llm-body">
             <div className="llm-raw-text">
@@ -215,7 +236,7 @@ const VoiceLLMFeedback: React.FC<VoiceLLMFeedbackProps> = ({
 
             <div className="llm-actions">
               <button className="llm-btn llm-btn-confirm" onClick={onConfirm}>
-                ✓ 确认创建
+                {getConfirmLabel(result.intent)}
               </button>
               <button className="llm-btn llm-btn-cancel" onClick={onCancel}>
                 ✕ 取消

@@ -7,6 +7,7 @@ Chinese Vosk model and feeds the WAV frames directly to KaldiRecognizer.
 import json
 import hashlib
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -21,6 +22,15 @@ MODEL_ENV = "VOSK_MODEL_PATH"
 
 _model: Optional[Model] = None
 _model_path: Optional[Path] = None
+
+_CJK_RANGE = "\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+_WORD_CORRECTIONS = (
+    ("代办", "待办"),
+    ("日成", "日程"),
+    ("日承", "日程"),
+    ("事建", "事件"),
+    ("热文", "论文"),
+)
 
 
 def _base_paths() -> list[Path]:
@@ -121,6 +131,40 @@ def _extract_text(result_json: str) -> str:
     return data.get("text", "").strip()
 
 
+def normalize_recognized_text(text: str) -> str:
+    """Normalize Vosk's spaced Chinese output for command parsing."""
+    if not text:
+        return ""
+
+    normalized = text.strip().lower()
+    normalized = normalized.translate(str.maketrans({
+        "０": "0",
+        "１": "1",
+        "２": "2",
+        "３": "3",
+        "４": "4",
+        "５": "5",
+        "６": "6",
+        "７": "7",
+        "８": "8",
+        "９": "9",
+    }))
+    normalized = re.sub(r"[，。！？、；：]", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    previous = None
+    while previous != normalized:
+        previous = normalized
+        normalized = re.sub(f"([{_CJK_RANGE}])\\s+([{_CJK_RANGE}])", r"\1\2", normalized)
+        normalized = re.sub(f"([{_CJK_RANGE}])\\s+(\\d)", r"\1\2", normalized)
+        normalized = re.sub(f"(\\d)\\s+([{_CJK_RANGE}])", r"\1\2", normalized)
+
+    for wrong, right in _WORD_CORRECTIONS:
+        normalized = normalized.replace(wrong, right)
+
+    return normalized.strip()
+
+
 def transcribe_audio(audio_data: bytes, mime_type: str = "audio/wav") -> Optional[str]:
     """Transcribe WAV audio bytes with the local Vosk model."""
     if not audio_data:
@@ -170,7 +214,10 @@ def transcribe_audio(audio_data: bytes, mime_type: str = "audio/wav") -> Optiona
             if final_text:
                 chunks.append(final_text)
 
-            text = " ".join(chunks).strip()
+            raw_text = " ".join(chunks).strip()
+            text = normalize_recognized_text(raw_text)
+            if raw_text != text:
+                print(f"[STT] Recognized raw: {raw_text}")
             print(f"[STT] Recognized: {text}")
             return text or None
 
