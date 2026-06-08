@@ -18,23 +18,30 @@
 
 ---
 
-## 📸 界面预览
+## 📸 页面展示
 
 <div align="center">
-  <img src="docs/screenshot.png" alt="应用界面" width="800" />
-  <p><em>现代简洁的日历界面，支持日/周/月三种视图</em></p>
+  <img src="./页面展示.png" alt="语音日历月视图" width="900" />
+  <p><em>月视图：查看整月任务与日程分布</em></p>
+
+  <img src="./页面展示2.png" alt="语音日历日视图任务管理" width="900" />
+  <p><em>日视图：管理今日任务、任务进度与今日事件</em></p>
+
+  <img src="./页面展示3.png" alt="语音设置与 DeepSeek 配置" width="900" />
+  <p><em>语音设置：本地 Vosk 语音识别 + DeepSeek 智能语义解析</em></p>
 </div>
 
 ## 🎬 项目讲解视频
 
 <div align="center">
-  <p><em>📹 视频将上传至 GitHub Release，敬请期待</em></p>
+  <video src="./讲解视频.mp4" controls width="900"></video>
+  <p><a href="./讲解视频.mp4">如果视频无法直接预览，可以点击这里查看讲解视频</a></p>
 </div>
 
 **视频内容概览：**
-- 项目架构与技术栈介绍
-- 功能演示与操作指南
-- 语音交互与 AI 可视化展示
+- 本地项目文件结构介绍
+- 语音日历工具核心功能演示
+- 离线语音识别与 DeepSeek 智能语义解析展示
 
 ---
 
@@ -56,8 +63,8 @@
 
 ### 🎙️ 语音交互
 - **离线语音输入**：前端录制 WAV，后端使用本地 Vosk 中文模型识别
-- **混合解析**：简单指令正则解析（快速），复杂指令大模型解析（准确）
-- **大模型支持**：可接入 DeepSeek API，理解复杂自然语言
+- **智能语义解析**：可接入 DeepSeek API，理解复杂自然语言指令
+- **结构化结果**：自动提取任务/事件标题、日期、时间、地点、优先级和提醒信息
 - **语音反馈**：操作结果语音播报
 - **AI 可视化**：实时显示大模型调用状态、推理过程、解析结果
 
@@ -142,51 +149,45 @@ python -m PyInstaller build.spec --noconfirm
 ## 🏗️ 技术架构
 
 ```
-voice_calender_tool/
+D:\语音版的日历工具/
+├── app.py                   # 源码运行入口之一
+├── desktop_app.py           # 桌面版 exe 运行入口
+├── build.bat                # Windows 打包脚本
+├── build.spec               # PyInstaller 打包配置
+├── 语音日历工具.spec          # exe 打包配置
+├── 页面展示.png              # README 页面展示图：月视图
+├── 页面展示2.png             # README 页面展示图：日视图
+├── 页面展示3.png             # README 页面展示图：语音设置
+├── 讲解视频.mp4              # 项目讲解视频
+│
 ├── frontend/                # 前端 React 应用
 │   ├── src/
-│   │   ├── components/      # UI 组件
-│   │   │   ├── Header.tsx        # 顶部导航栏
-│   │   │   ├── Sidebar.tsx       # 左侧栏（语音+导航+快捷指令）
-│   │   │   ├── MonthView.tsx     # 月视图
-│   │   │   ├── WeekView.tsx      # 周视图
-│   │   │   ├── DayView.tsx       # 日视图（含Todo面板）
-│   │   │   ├── EventModal.tsx    # 事件编辑弹窗
-│   │   │   ├── TodoModal.tsx     # 任务编辑弹窗
-│   │   │   ├── SettingsModal.tsx # 语音设置弹窗
-│   │   │   └── VoiceFeedback.tsx # 语音反馈组件
-│   │   ├── hooks/           # 自定义 Hooks
-│   │   │   ├── useSpeechRecognition.ts  # 语音识别
-│   │   │   ├── useSpeechSynthesis.ts    # 语音合成
-│   │   │   └── useReminder.ts           # 提醒通知
-│   │   ├── utils/           # 工具函数
-│   │   │   └── voiceCommandParser.ts    # 语音指令解析器
 │   │   ├── App.tsx          # 主应用组件
-│   │   └── App.css          # 全局样式
-│   └── package.json
+│   │   ├── App.css          # 主样式
+│   │   ├── components/      # Header、Sidebar、DayView、WeekView、MonthView 等组件
+│   │   ├── hooks/           # 语音识别、语音播报、提醒通知 hooks
+│   │   └── utils/           # 日期工具、语音文本处理、语音指令解析
+│   ├── public/              # PWA 图标与 manifest
+│   └── package.json         # 前端依赖与脚本
 │
 ├── backend/                 # 后端 Flask 应用
+│   ├── main.py              # 后端启动入口
+│   ├── requirements.txt     # 后端依赖
 │   ├── app/
-│   │   ├── api/             # API 蓝图
-│   │   │   ├── events.py        # 事件 API
-│   │   │   ├── calendars.py     # 日历 API
-│   │   │   ├── reminders.py     # 提醒 API
-│   │   │   ├── todos.py         # 任务 API
-│   │   │   └── voice.py         # 语音解析 API
-│   │   ├── models/          # 数据模型
-│   │   │   ├── event.py         # 事件模型
-│   │   │   ├── calendar.py      # 日历模型
-│   │   │   ├── reminder.py      # 提醒模型
-│   │   │   └── todo.py          # 任务模型
-│   │   ├── services/        # 业务服务
-│   │   │   ├── stt_service.py   # Vosk 离线语音识别服务
-│   │   │   └── llm_service.py   # DeepSeek 大模型服务
-│   │   ├── utils.py         # 工具函数
-│   │   └── __init__.py      # 应用初始化
-│   └── main.py              # 入口文件
+│   │   ├── api/             # calendars、events、reminders、todos、voice 接口
+│   │   ├── models/          # calendar、event、reminder、todo 数据模型
+│   │   ├── services/        # stt_service 离线识别、llm_service 语义解析
+│   │   └── utils.py         # 后端工具函数
+│   ├── instance/            # 后端本地数据库目录
+│   └── vosk-model/          # 本地 Vosk 中文语音识别模型
 │
-├── build.spec               # PyInstaller 打包配置
-└── README.md
+├── dist/                    # 打包后的 exe 输出目录
+├── instance/                # 本地运行数据目录
+├── whisper-models/          # 本地模型目录
+├── requirements.txt         # 根目录 Python 依赖
+├── start.bat                # Windows 启动脚本
+├── start.sh                 # Shell 启动脚本
+└── README.md                # 项目说明文档
 ```
 
 ### 技术栈
@@ -197,7 +198,7 @@ voice_calender_tool/
 | **构建** | Vite | 快速开发构建工具 |
 | **后端** | Flask + SQLAlchemy | RESTful API 服务 |
 | **数据库** | SQLite | 轻量级本地存储 |
-| **语音** | Web Audio API + Vosk + DeepSeek | 离线识别 + 混合语义解析 |
+| **语音** | Web Audio API + Vosk + DeepSeek | 离线识别 + 智能语义解析 |
 | **打包** | PyInstaller | 生成独立 exe 文件 |
 
 ---
@@ -299,6 +300,25 @@ voice_calender_tool/
 | `POST` | `/api/calendars` | 创建日历 |
 | `PUT` | `/api/calendars/:id` | 更新日历 |
 | `DELETE` | `/api/calendars/:id` | 删除日历 |
+
+### 语音 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/voice/config` | 获取语音与 DeepSeek 配置状态 |
+| `POST` | `/api/voice/config` | 保存 DeepSeek API Key |
+| `POST` | `/api/voice/transcribe` | 上传语音并使用本地 Vosk 识别文本 |
+| `POST` | `/api/voice/parse` | 使用 DeepSeek 解析语音文本意图 |
+
+### 提醒 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/reminders` | 获取提醒列表 |
+| `POST` | `/api/reminders` | 创建提醒 |
+| `GET` | `/api/reminders/pending` | 获取待提醒项目 |
+| `PUT` | `/api/reminders/:id/sent` | 标记提醒已发送 |
+| `DELETE` | `/api/reminders/:id` | 删除提醒 |
 
 ---
 
