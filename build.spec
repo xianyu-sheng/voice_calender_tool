@@ -1,14 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_dynamic_libs
+
 block_cipher = None
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
+    binaries=collect_dynamic_libs('vosk'),
     datas=[
         ('frontend/dist', 'frontend/dist'),
         ('backend/app', 'backend/app'),
+        ('backend/vosk-model', 'backend/vosk-model'),
     ],
     hiddenimports=[
         'flask',
@@ -16,6 +19,7 @@ a = Analysis(
         'flask_sqlalchemy',
         'sqlalchemy',
         'sqlalchemy.sql.default_comparator',
+        'vosk',
         'dotenv',
         'python_dotenv',
         'requests',

@@ -1,12 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_dynamic_libs
+
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
+    binaries=collect_dynamic_libs('vosk'),
     datas=[('frontend/dist', 'frontend/dist'), ('backend', 'backend')],
-    hiddenimports=['flask', 'flask_cors', 'flask_sqlalchemy', 'sqlalchemy', 'requests', 'urllib3', 'certifi', 'charset_normalizer', 'idna', 'dotenv', 'json', 'wave'],
+    hiddenimports=['flask', 'flask_cors', 'flask_sqlalchemy', 'sqlalchemy', 'vosk', 'requests', 'urllib3', 'certifi', 'charset_normalizer', 'idna', 'dotenv', 'json', 'wave'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

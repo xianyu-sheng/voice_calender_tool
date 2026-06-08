@@ -19,10 +19,12 @@ echo [2/3] 打包成exe（使用 Python 3.12 venv）...
 D:\voice_cal_venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --name "语音日历工具" ^
     --add-data "frontend/dist;frontend/dist" ^
     --add-data "backend;backend" ^
+    --collect-binaries "vosk" ^
     --hidden-import "flask" ^
     --hidden-import "flask_cors" ^
     --hidden-import "flask_sqlalchemy" ^
     --hidden-import "sqlalchemy" ^
+    --hidden-import "vosk" ^
     --hidden-import "requests" ^
     --hidden-import "urllib3" ^
     --hidden-import "certifi" ^

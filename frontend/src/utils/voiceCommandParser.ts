@@ -98,6 +98,7 @@ const TIME_PATTERNS = {
     evening: /晚上/,
     specificHour: /(\d{1,2})[点时](\d{1,2})?分?/,
     chineseHour: /(一|二|三|四|五|六|七|八|九|十|十一|十二)点/,
+    timeRange: /(\d{1,2}|一|二|三|四|五|六|七|八|九|十|十一|十二)[点时](半|\d{1,2}分?)?(?:到|至|-)(\d{1,2}|一|二|三|四|五|六|七|八|九|十|十一|十二)[点时](半|\d{1,2}分?)?/,
     relativeHours: /(\d+|[一二三四五六七八九十]+)小时后/,
     relativeMinutes: /(\d+|[一二三四五六七八九十]+)分钟后/,
     halfHour: /半/,
@@ -130,9 +131,34 @@ function parseChineseNumber(text: string): number {
   return isNaN(num) ? 0 : num;
 }
 
-function extractTime(text: string): { date?: string; time?: string; reminderMinutes?: number } {
+function parseHourText(text: string): number {
+  return CHINESE_NUMBERS[text] ?? parseInt(text);
+}
+
+function parseMinuteText(text?: string): number {
+  if (!text) return 0;
+  if (text === '半') return 30;
+  return parseInt(text.replace('分', '')) || 0;
+}
+
+function normalizeHourByPeriod(hour: number, text: string): number {
+  if (TIME_PATTERNS.time.afternoon.test(text) && hour < 12) {
+    return hour + 12;
+  }
+  if (TIME_PATTERNS.time.evening.test(text) && hour < 12) {
+    return hour + 12;
+  }
+  return hour;
+}
+
+function formatTime(hour: number, minute: number): string {
+  return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+}
+
+function extractTime(text: string): { date?: string; time?: string; end_time?: string; reminderMinutes?: number } {
   let date: string | undefined;
   let time: string | undefined;
+  let end_time: string | undefined;
   let reminderMinutes: number | undefined;
 
   const today = new Date();
@@ -197,33 +223,32 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     date = toLocalDateStr(targetDate);
   }
 
-  const hourMatch = text.match(TIME_PATTERNS.time.specificHour);
-  if (hourMatch) {
-    let hour = parseInt(hourMatch[1]);
-    const minute = hourMatch[2] ? parseInt(hourMatch[2]) : 0;
-
-    if (TIME_PATTERNS.time.afternoon.test(text) && hour < 12) {
-      hour += 12;
-    } else if (TIME_PATTERNS.time.evening.test(text) && hour < 12) {
-      hour += 12;
+  const timeRangeMatch = text.match(TIME_PATTERNS.time.timeRange);
+  if (timeRangeMatch) {
+    const startHour = normalizeHourByPeriod(parseHourText(timeRangeMatch[1]), text);
+    const startMinute = parseMinuteText(timeRangeMatch[2]);
+    let endHour = normalizeHourByPeriod(parseHourText(timeRangeMatch[3]), text);
+    const endMinute = parseMinuteText(timeRangeMatch[4]);
+    if (endHour < startHour && startHour >= 12 && endHour < 12) {
+      endHour += 12;
     }
+    time = formatTime(startHour, startMinute);
+    end_time = formatTime(endHour, endMinute);
+  }
 
-    time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  const hourMatch = text.match(TIME_PATTERNS.time.specificHour);
+  if (!time && hourMatch) {
+    const hour = normalizeHourByPeriod(parseInt(hourMatch[1]), text);
+    const minute = hourMatch[2] ? parseInt(hourMatch[2]) : 0;
+    time = formatTime(hour, minute);
   }
 
   const chineseHourMatch = text.match(TIME_PATTERNS.time.chineseHour);
-  if (chineseHourMatch) {
-    let hour = CHINESE_NUMBERS[chineseHourMatch[1]] || 0;
-
-    if (TIME_PATTERNS.time.afternoon.test(text) && hour < 12) {
-      hour += 12;
-    } else if (TIME_PATTERNS.time.evening.test(text) && hour < 12) {
-      hour += 12;
-    }
-
+  if (!time && chineseHourMatch) {
+    const hour = normalizeHourByPeriod(CHINESE_NUMBERS[chineseHourMatch[1]] || 0, text);
     const halfMatch = text.match(TIME_PATTERNS.time.halfHour);
     const minute = halfMatch ? 30 : 0;
-    time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    time = formatTime(hour, minute);
   }
 
   const relativeHoursMatch = text.match(TIME_PATTERNS.time.relativeHours);
@@ -249,7 +274,7 @@ function extractTime(text: string): { date?: string; time?: string; reminderMinu
     reminderMinutes = parseChineseNumber(reminderMatch[3]);
   }
 
-  return { date, time, reminderMinutes };
+  return { date, time, end_time, reminderMinutes };
 }
 
 function extractPriority(text: string): 'low' | 'medium' | 'high' | undefined {
@@ -321,7 +346,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
   for (const [intent, patterns] of Object.entries(INTENT_PATTERNS)) {
     for (const pattern of patterns) {
       if (pattern.test(normalizedText)) {
-        const { date, time, reminderMinutes } = extractTime(normalizedText);
+        const { date, time, end_time, reminderMinutes } = extractTime(normalizedText);
         const title = extractTitle(text, intent);
         const location = extractLocation(normalizedText);
         const priority = extractPriority(normalizedText);
@@ -331,6 +356,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
           title,
           date,
           time,
+          end_time,
           location,
           reminderMinutes,
           priority,
@@ -340,7 +366,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
     }
   }
 
-  const { date, time, reminderMinutes } = extractTime(normalizedText);
+  const { date, time, end_time, reminderMinutes } = extractTime(normalizedText);
   if (date || time) {
     const title = extractTitle(text, 'create_event');
     return {
@@ -348,6 +374,7 @@ export function parseVoiceCommand(text: string): ParsedCommand {
       title,
       date,
       time,
+      end_time,
       location: extractLocation(normalizedText),
       reminderMinutes,
       priority: extractPriority(normalizedText),

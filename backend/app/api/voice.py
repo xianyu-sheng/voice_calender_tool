@@ -1,8 +1,7 @@
 import os
 from flask import Blueprint, request, jsonify
-from ..services.llm_service import parse_with_llm, is_complex_command
-from ..services.stt_service import transcribe_audio
-from ..services.stt_service import BAIDU_API_KEY as _STT_API_KEY, BAIDU_SECRET_KEY as _STT_SECRET_KEY
+from ..services.llm_service import parse_with_llm
+from ..services.stt_service import get_model_path, transcribe_audio
 
 voice_bp = Blueprint('voice', __name__)
 
@@ -12,7 +11,6 @@ API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 @voice_bp.route('/api/voice/config', methods=['POST'])
 def config_api_key():
     global API_KEY
-    from ..services import stt_service
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'Missing data'}), 400
@@ -20,23 +18,26 @@ def config_api_key():
     if 'api_key' in data:
         API_KEY = data['api_key']
 
-    if 'stt_api_key' in data:
-        stt_service.BAIDU_API_KEY = data['stt_api_key']
-    if 'stt_secret_key' in data:
-        stt_service.BAIDU_SECRET_KEY = data['stt_secret_key']
-
     return jsonify({'success': True, 'message': 'Config updated'})
 
 
 @voice_bp.route('/api/voice/config', methods=['GET'])
 def get_config():
+    try:
+        model_path = str(get_model_path())
+        has_stt_model = True
+    except FileNotFoundError:
+        model_path = None
+        has_stt_model = False
+
     return jsonify({
         'success': True,
         'data': {
             'has_api_key': bool(API_KEY),
             'api_url': 'https://api.deepseek.com',
-            'has_stt_key': bool(_STT_API_KEY and _STT_SECRET_KEY),
-            'stt_engine': 'baidu (cloud)',
+            'has_stt_model': has_stt_model,
+            'stt_engine': 'vosk (offline)',
+            'stt_model_path': model_path,
         }
     })
 

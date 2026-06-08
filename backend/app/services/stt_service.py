@@ -1,142 +1,199 @@
 """
-语音识别服务 — 使用百度语音识别 API
-纯 HTTP REST 接口，无需任何本地 C++ 库
-免费额度: 50,000次/天，中文识别精度极高
+Offline speech-to-text service based on Vosk.
+
+The frontend records 16 kHz mono PCM WAV. This service loads the local
+Chinese Vosk model and feeds the WAV frames directly to KaldiRecognizer.
 """
-import os
-import sys
 import json
-import base64
-import requests
+import hashlib
+import os
+import shutil
+import sys
 import tempfile
 import wave
+from pathlib import Path
 from typing import Optional
 
-# 百度 API 配置
-BAIDU_TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
-BAIDU_STT_URL = "https://vop.baidu.com/server_api"
+from vosk import KaldiRecognizer, Model, SetLogLevel
 
-# API 凭据（可通过 settings 设置）
-BAIDU_API_KEY = ""
-BAIDU_SECRET_KEY = ""
+MODEL_NAME = "vosk-model-small-cn-0.22"
+MODEL_ENV = "VOSK_MODEL_PATH"
 
-_access_token = None
-_token_expires = 0
+_model: Optional[Model] = None
+_model_path: Optional[Path] = None
 
 
-def get_access_token() -> Optional[str]:
-    """获取百度 API access token（自动缓存和刷新）"""
-    global _access_token, _token_expires
-    import time
+def _base_paths() -> list[Path]:
+    paths: list[Path] = []
 
-    if _access_token and time.time() < _token_expires - 60:
-        return _access_token
+    if getattr(sys, "frozen", False):
+        paths.append(Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)))
 
-    key = BAIDU_API_KEY or os.environ.get("BAIDU_STT_API_KEY", "")
-    secret = BAIDU_SECRET_KEY or os.environ.get("BAIDU_STT_SECRET_KEY", "")
+    service_file = Path(__file__).resolve()
+    backend_dir = service_file.parents[2]
+    project_dir = backend_dir.parent
+    paths.extend([backend_dir, project_dir])
+    return paths
 
-    if not key or not secret:
-        print("[STT] Baidu API key not configured")
+
+def get_model_path() -> Path:
+    env_path = os.environ.get(MODEL_ENV)
+    candidates: list[Path] = []
+
+    if env_path:
+        candidates.append(Path(env_path))
+
+    for base in _base_paths():
+        candidates.extend([
+            base / "vosk-model" / MODEL_NAME,
+            base / "backend" / "vosk-model" / MODEL_NAME,
+        ])
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+
+    searched = "\n".join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        f"Vosk model not found. Set {MODEL_ENV} or place the model at "
+        f"backend/vosk-model/{MODEL_NAME}.\nSearched:\n{searched}"
+    )
+
+
+def get_model() -> Model:
+    global _model, _model_path
+
+    source_model_path = get_model_path()
+    model_path = get_vosk_runtime_model_path(source_model_path)
+    if _model is None or _model_path != model_path:
+        SetLogLevel(-1)
+        print(f"[STT] Loading Vosk model: {model_path}")
+        _model = Model(str(model_path))
+        _model_path = model_path
+        print("[STT] Vosk model loaded")
+
+    return _model
+
+
+def get_vosk_runtime_model_path(model_path: Path) -> Path:
+    """Return a Vosk-compatible model path.
+
+    On Windows, Vosk can fail when the model lives under a non-ASCII path.
+    The project often lives in a Chinese directory, so we mirror the model
+    once into an ASCII temp cache and load Vosk from there.
+    """
+    path_text = str(model_path)
+    try:
+        path_text.encode("ascii")
+        return model_path
+    except UnicodeEncodeError:
+        pass
+
+    if os.name != "nt":
+        return model_path
+
+    digest = hashlib.sha1(path_text.encode("utf-8")).hexdigest()[:12]
+    cache_root = Path(tempfile.gettempdir()) / "voice_calendar_vosk"
+    cache_path = cache_root / f"{MODEL_NAME}-{digest}"
+
+    if _looks_like_vosk_model(cache_path):
+        return cache_path
+
+    cache_root.mkdir(parents=True, exist_ok=True)
+    print(f"[STT] Mirroring Vosk model to ASCII cache: {cache_path}")
+    shutil.copytree(model_path, cache_path, dirs_exist_ok=True)
+    return cache_path
+
+
+def _looks_like_vosk_model(path: Path) -> bool:
+    return (
+        (path / "am" / "final.mdl").exists()
+        and (path / "conf" / "model.conf").exists()
+        and (path / "graph").exists()
+    )
+
+
+def _extract_text(result_json: str) -> str:
+    try:
+        data = json.loads(result_json)
+    except json.JSONDecodeError:
+        return ""
+    return data.get("text", "").strip()
+
+
+def transcribe_audio(audio_data: bytes, mime_type: str = "audio/wav") -> Optional[str]:
+    """Transcribe WAV audio bytes with the local Vosk model."""
+    if not audio_data:
         return None
 
     try:
-        resp = requests.post(
-            BAIDU_TOKEN_URL,
-            params={
-                "grant_type": "client_credentials",
-                "client_id": key,
-                "client_secret": secret
-            },
-            timeout=10
-        )
-        data = resp.json()
-        _access_token = data.get("access_token")
-        expires_in = data.get("expires_in", 86400)
-        _token_expires = time.time() + expires_in
-        print(f"[STT] Baidu token obtained, expires in {expires_in}s")
-        return _access_token
+        model = get_model()
+    except FileNotFoundError:
+        raise
     except Exception as e:
-        print(f"[STT] Failed to get Baidu token: {e}")
-        return None
+        raise RuntimeError(f"failed to load Vosk model: {e}") from e
 
-
-def transcribe_audio(audio_data: bytes, mime_type: str = 'audio/wav') -> Optional[str]:
-    """使用百度语音识别 API 将音频转录为文本"""
-    token = get_access_token()
-    if not token:
-        print("[STT] No Baidu token available — STT unavailable")
-        return None
-
-    # 验证和准备音频
-    wav_path = None
     try:
-        # 写入临时 WAV 文件，检查音频有效性
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-            tmp.write(audio_data)
-            wav_path = tmp.name
-
-        if os.path.getsize(wav_path) < 100:
-            print("[STT] Audio file too small")
-            return None
-
-        # 检查 WAV 格式
-        try:
-            wf = wave.open(wav_path, 'rb')
-            framerate = wf.getframerate()
-            nframes = wf.getnframes()
+        with wave.open(PathLikeBytes(audio_data), "rb") as wf:
             channels = wf.getnchannels()
-            duration = nframes / max(framerate, 1)
-            wf.close()
-            print(f"[STT] Audio: {framerate}Hz, {channels}ch, {duration:.1f}s [{nframes} frames]")
+            sample_width = wf.getsampwidth()
+            sample_rate = wf.getframerate()
+            frame_count = wf.getnframes()
+            duration = frame_count / max(sample_rate, 1)
 
+            print(
+                f"[STT] Audio: {sample_rate}Hz, {channels}ch, "
+                f"{sample_width * 8}bit, {duration:.1f}s"
+            )
+
+            if channels != 1:
+                raise ValueError("audio must be mono")
+            if sample_width != 2:
+                raise ValueError("audio must be 16-bit PCM WAV")
             if duration < 0.3:
-                print("[STT] Audio too short")
                 return None
-            if duration > 60:
-                print("[STT] Audio too long (>60s), truncating not supported")
-                # 百度免费版限制 60 秒
-        except wave.Error as e:
-            print(f"[STT] Invalid WAV: {e}")
-            return None
 
-        # 读取音频并 Base64 编码
-        with open(wav_path, 'rb') as f:
-            audio_b64 = base64.b64encode(f.read()).decode('utf-8')
+            recognizer = KaldiRecognizer(model, sample_rate)
+            recognizer.SetWords(False)
 
-        # 调用百度语音识别 API
-        payload = {
-            "format": "pcm",
-            "rate": framerate,
-            "channel": channels,
-            "cuid": "voice_calendar_tool",
-            "token": token,
-            "speech": audio_b64,
-            "len": os.path.getsize(wav_path),
-            "dev_pid": 1537,  # 普通话(纯中文识别)
-        }
+            chunks: list[str] = []
+            while True:
+                data = wf.readframes(4000)
+                if not data:
+                    break
+                if recognizer.AcceptWaveform(data):
+                    text = _extract_text(recognizer.Result())
+                    if text:
+                        chunks.append(text)
 
-        print(f"[STT] Calling Baidu STT API (audio: {os.path.getsize(wav_path)} bytes)...")
-        resp = requests.post(BAIDU_STT_URL, json=payload, timeout=30)
-        result = resp.json()
+            final_text = _extract_text(recognizer.FinalResult())
+            if final_text:
+                chunks.append(final_text)
 
-        if result.get("err_no") == 0:
-            text = ' '.join(result.get("result", []))
+            text = " ".join(chunks).strip()
             print(f"[STT] Recognized: {text}")
-            return text
-        else:
-            err_msg = result.get("err_msg", "Unknown error")
-            err_no = result.get("err_no", -1)
-            print(f"[STT] Baidu API error: [{err_no}] {err_msg}")
-            return None
+            return text or None
 
-    except Exception as e:
-        print(f"[STT] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-    finally:
-        if wav_path and os.path.exists(wav_path):
-            try:
-                os.unlink(wav_path)
-            except Exception:
-                pass
+    except wave.Error as e:
+        raise ValueError(f"invalid WAV audio: {e}") from e
+
+
+class PathLikeBytes:
+    """Small file-like adapter so wave.open can read bytes without temp files."""
+
+    def __init__(self, data: bytes):
+        from io import BytesIO
+
+        self._buffer = BytesIO(data)
+
+    def read(self, size: int = -1) -> bytes:
+        return self._buffer.read(size)
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        return self._buffer.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._buffer.tell()
+
+    def close(self) -> None:
+        self._buffer.close()

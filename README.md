@@ -55,7 +55,7 @@
 - **自动顺延**：未完成任务自动顺延到下一天
 
 ### 🎙️ 语音交互
-- **语音输入**：支持中文语音识别
+- **离线语音输入**：前端录制 WAV，后端使用本地 Vosk 中文模型识别
 - **混合解析**：简单指令正则解析（快速），复杂指令大模型解析（准确）
 - **大模型支持**：可接入 DeepSeek API，理解复杂自然语言
 - **语音反馈**：操作结果语音播报
@@ -95,6 +95,9 @@ venv\Scripts\activate  # Windows
 
 # 安装依赖
 pip install -r requirements.txt
+
+# 确认离线语音模型存在
+# 默认路径：backend/vosk-model/vosk-model-small-cn-0.22
 
 # 配置 API Key（可选，用于大模型解析复杂语音指令）
 cp .env.example .env
@@ -176,6 +179,7 @@ voice_calender_tool/
 │   │   │   ├── reminder.py      # 提醒模型
 │   │   │   └── todo.py          # 任务模型
 │   │   ├── services/        # 业务服务
+│   │   │   ├── stt_service.py   # Vosk 离线语音识别服务
 │   │   │   └── llm_service.py   # DeepSeek 大模型服务
 │   │   ├── utils.py         # 工具函数
 │   │   └── __init__.py      # 应用初始化
@@ -193,7 +197,7 @@ voice_calender_tool/
 | **构建** | Vite | 快速开发构建工具 |
 | **后端** | Flask + SQLAlchemy | RESTful API 服务 |
 | **数据库** | SQLite | 轻量级本地存储 |
-| **语音** | Web Speech API + DeepSeek | 混合语音解析 |
+| **语音** | Web Audio API + Vosk + DeepSeek | 离线识别 + 混合语义解析 |
 | **打包** | PyInstaller | 生成独立 exe 文件 |
 
 ---
@@ -216,7 +220,7 @@ voice_calender_tool/
 
 ### 语音指令
 
-点击左侧栏麦克风按钮开始语音输入，支持两种解析模式：
+点击左侧栏麦克风按钮开始语音输入。语音转文字默认由本地 Vosk 模型离线完成，不需要配置云端语音识别 API；识别出的文字再进入两种解析模式：
 
 #### 🚀 快速模式（正则解析）
 适用于简单指令，毫秒级响应：
@@ -318,6 +322,20 @@ voice_calender_tool/
 ---
 
 ## 🔧 配置说明
+
+### 离线语音识别配置
+
+语音识别使用本地 Vosk 中文模型，默认读取：
+
+```bash
+backend/vosk-model/vosk-model-small-cn-0.22
+```
+
+如果模型放在其他位置，可以设置环境变量：
+
+```bash
+VOSK_MODEL_PATH=D:\path\to\vosk-model-small-cn-0.22
+```
 
 ### DeepSeek API 配置（可选）
 

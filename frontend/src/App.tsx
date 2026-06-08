@@ -60,8 +60,6 @@ function App() {
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
-  const [sttApiKey, setSttApiKey] = useState<string>(() => localStorage.getItem('baidu_stt_api_key') || '');
-  const [sttSecretKey, setSttSecretKey] = useState<string>(() => localStorage.getItem('baidu_stt_secret_key') || '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // LLM 可视化状态
@@ -93,18 +91,14 @@ function App() {
     requestPermission();
     autoPostponeTodos();
 
-    // 每次启动时把 localStorage 中的 API keys 同步到后端
+    // 每次启动时把 localStorage 中的 API key 同步到后端
     const savedDeepseek = localStorage.getItem('deepseek_api_key');
-    const savedBaiduApi = localStorage.getItem('baidu_stt_api_key');
-    const savedBaiduSecret = localStorage.getItem('baidu_stt_secret_key');
 
-    if (savedDeepseek || savedBaiduApi || savedBaiduSecret) {
+    if (savedDeepseek) {
       const config: any = {};
       if (savedDeepseek) config.api_key = savedDeepseek;
-      if (savedBaiduApi) config.stt_api_key = savedBaiduApi;
-      if (savedBaiduSecret) config.stt_secret_key = savedBaiduSecret;
 
-      console.log('[App] 同步 API keys 到后端...');
+      console.log('[App] 同步 API key 到后端...');
       fetch('http://localhost:8000/api/voice/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -343,14 +337,23 @@ function App() {
     }
 
     const endDate = new Date(startDate);
-    endDate.setHours(endDate.getHours() + 1);
+    if (command.end_time) {
+      const [endHours, endMinutes] = command.end_time.split(':').map(Number);
+      endDate.setHours(endHours, endMinutes, 0, 0);
+      if (endDate <= startDate) {
+        endDate.setDate(endDate.getDate() + 1);
+      }
+    } else {
+      endDate.setHours(endDate.getHours() + 1);
+    }
 
     const eventData = {
       title: command.title || '新事件',
       start_time: startDate.toISOString(),
       end_time: endDate.toISOString(),
+      description: command.description,
       location: command.location,
-      reminder_minutes: command.reminderMinutes || 15
+      reminder_minutes: command.reminderMinutes ?? 15
     };
 
     try {
@@ -521,19 +524,13 @@ function App() {
     }
   };
 
-  const handleSaveApiKey = (config: { deepseekApiKey: string; baiduSttApiKey: string; baiduSttSecretKey: string }) => {
+  const handleSaveApiKey = (config: { deepseekApiKey: string }) => {
     setApiKey(config.deepseekApiKey);
-    setSttApiKey(config.baiduSttApiKey);
-    setSttSecretKey(config.baiduSttSecretKey);
 
     localStorage.setItem('deepseek_api_key', config.deepseekApiKey);
-    localStorage.setItem('baidu_stt_api_key', config.baiduSttApiKey);
-    localStorage.setItem('baidu_stt_secret_key', config.baiduSttSecretKey);
 
     const backendConfig: any = {};
     if (config.deepseekApiKey) backendConfig.api_key = config.deepseekApiKey;
-    if (config.baiduSttApiKey) backendConfig.stt_api_key = config.baiduSttApiKey;
-    if (config.baiduSttSecretKey) backendConfig.stt_secret_key = config.baiduSttSecretKey;
 
     fetch('http://localhost:8000/api/voice/config', {
       method: 'POST',
@@ -857,8 +854,6 @@ function App() {
         onSave={handleSaveApiKey}
         currentConfig={{
           deepseekApiKey: apiKey,
-          baiduSttApiKey: sttApiKey,
-          baiduSttSecretKey: sttSecretKey,
         }}
       />
     </div>
