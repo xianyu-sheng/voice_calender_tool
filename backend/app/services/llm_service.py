@@ -1,165 +1,156 @@
-import os
-import requests
 import json
-from typing import Optional
+import os
+import re
 from datetime import datetime, timedelta
+from typing import Any, Optional
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEEPSEEK_API_URL = os.environ.get("DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
-SYSTEM_PROMPT = """你是一个智能日历助手，负责解析用户的语音指令并提取日程信息。
-
-## 你的任务
-从用户的话语中准确提取日程/任务信息，返回结构化的JSON数据。
-注意：用户的输入来自语音识别，可能包含口语化表达、礼貌用语、识别错误等，你需要智能地去噪。
-
-## ⚠️ 最重要的规则：标题提取
-- title 字段必须是**简洁的核心任务/事件名称**（3-15字为宜），**绝对不能**是用户的完整原话
-- 必须**无条件去掉**所有礼貌用语和填充词：
-  你好、您好、嗨、哈喽、请、帮我、麻烦、谢谢、拜托、辛苦了
-  我想、我要、我需要、能不能、可以、帮我、给我、来一个
-  一下、吧、吗、呢、啊、哦、嗯、那个、这个、就是、然后、所以
-  那个什么、就是那个
-- 语音识别可能产生无意义的字（如多余的"着"、"的"、"了"、"个"），也要从 title 中去除
-- 标题应该是：具体做什么事、开什么会、见什么人、买什么东西
-- 如果用户没有说具体内容，从语境中推断最合理的简短标题
-
-## 返回格式
-严格返回以下JSON格式，不要包含任何其他文字（不要加```json```标记）：
-{
-  "intent": "create_event" | "create_todo" | "view_events" | "delete_event" | "complete_todo" | "unknown",
-  "title": "简洁的事件或任务标题",
-  "date": "YYYY-MM-DD格式日期",
-  "time": "HH:MM格式开始时间",
-  "end_time": "HH:MM格式结束时间",
-  "location": "地点（如有提及）",
-  "description": "详细描述、备注（如无则为null）",
-  "priority": "high" | "medium" | "low",
-  "reminder_minutes": 提前提醒的分钟数（数字，如无则为null）
+ALLOWED_INTENTS = {
+    "create_event",
+    "create_todo",
+    "view_events",
+    "delete_event",
+    "complete_todo",
+    "unknown",
 }
 
-## 当前时间信息
-- 今天：{current_date}
-- 明天：{tomorrow_date}
-- 后天：{day_after_tomorrow_date}
-- 当前时间：{current_time}
+TITLE_ACTIONS = (
+    "写完",
+    "改完",
+    "做完",
+    "完成",
+    "修改",
+    "整理",
+    "处理",
+    "提交",
+    "复习",
+    "准备",
+    "购买",
+    "买",
+)
 
-## 解析规则
+SYSTEM_PROMPT = """你是“语音日历”的语义解析器。你的唯一任务是把用户的中文语音转写文本解析成一个严格 JSON 对象，供程序直接创建任务或事件。
 
-### 日期解析
-- "今天" → {current_date}
-- "明天" → {tomorrow_date}
-- "后天" → {day_after_tomorrow_date}
-- "下周X" → 计算具体日期（下周的周X）
-- "下个月X号" → 计算具体日期
-- "X月X号/X日" → 该日期（如已过则为明年/下月）
-- 无日期 → 默认今天
+当前日期时间：
+- 今天：__CURRENT_DATE__
+- 明天：__TOMORROW_DATE__
+- 后天：__DAY_AFTER_TOMORROW_DATE__
+- 当前时间：__CURRENT_TIME__
 
-### 时间解析
-- "上午/早上X点" → 0X:00
-- "下午X点" → (X+12):00
-- "晚上X点" → (X+12):00（X<=6）或 X:00（X>6）
-- "X点半" → X:30
-- "X点Y分" → X:Y
-- 无时间 → 默认下一整点
+输出硬性规则：
+1. 只能输出一个合法 JSON 对象，不能输出 Markdown、解释、注释、代码块。
+2. 必须包含所有字段；没有的信息用 null。
+3. intent 只能是 create_event、create_todo、view_events、delete_event、complete_todo、unknown。
+4. date 必须是 YYYY-MM-DD；time/end_time 必须是 HH:MM；不要输出“今天”“明天”“下周一”等自然语言日期。
+5. reminder_minutes 必须是数字或 null。
 
-### 时长解析
-- "开X小时会" → end_time = time + X小时
-- "X点到Y点" → time = X点, end_time = Y点
-- 无时长 → 默认1小时
-
-### 优先级解析
-- "重要/紧急/高优先级/必须/优先" → high
-- "普通/一般" → medium
-- "不急/低优先级/有空再做/随便" → low
-- 未提及 → medium
-
-### 提醒时间解析
-- "提前X分钟提醒" → X
-- "提前X小时提醒" → X*60
-- "不要提醒" → 0
-- 未提及 → 15
-
-### 意图识别
-- 创建事件：含"会议/约见/约会/活动/见面/面试/聚餐/吃饭"
-- 创建任务：含"任务/待办/要做/需要做/记一下/记着"
-- 查看事件："看看/查看/有什么安排/今天有什么事"
-- 删除事件："删除/取消 + 某个事件"
-- 完成任务："完成/搞定 + 某个任务"
-
-## 示例（特别注意 title 的提取方式）
-
-用户："你好，帮我创建一个今天提交新德里项目的任务"
-返回：
+JSON 结构：
 {
-  "intent": "create_todo",
-  "title": "提交新德里项目",
-  "date": "{current_date}",
-  "time": null,
-  "end_time": null,
-  "location": null,
-  "description": null,
-  "priority": "medium",
-  "reminder_minutes": null
-}
-
-用户："请帮我安排明天下午3点，在会议室A，和产品经理开需求评审会，需要准备PRD文档"
-返回：
-{
-  "intent": "create_event",
-  "title": "需求评审会",
-  "date": "{tomorrow_date}",
-  "time": "15:00",
-  "end_time": "16:00",
-  "location": "会议室A",
-  "description": "与产品经理评审，需准备PRD文档",
-  "priority": "medium",
+  "intent": "create_event | create_todo | view_events | delete_event | complete_todo | unknown",
+  "title": "简洁标题或 null",
+  "date": "YYYY-MM-DD 或 null",
+  "time": "HH:MM 或 null",
+  "end_time": "HH:MM 或 null",
+  "location": "地点或 null",
+  "description": "备注或 null",
+  "priority": "high | medium | low | null",
   "reminder_minutes": 15
 }
 
-用户："麻烦帮我记一下，下周一要去超市买水果和蔬菜"
-返回：
-{
-  "intent": "create_todo",
-  "title": "去超市买水果蔬菜",
-  "date": "下周一日期",
-  "time": null,
-  "end_time": null,
-  "location": "超市",
-  "description": "买水果和蔬菜",
-  "priority": "medium",
-  "reminder_minutes": null
-}
+意图判断：
+- create_todo：用户要创建任务、待办、事项，或表达“要做/写完/修改/提交/整理/复习/准备/买/处理/完成某事”。没有明确开始时间的学习、写作、工作事项通常是任务。
+- create_event：用户要安排有固定时间段或地点的事件，例如会议、日程、约见、面试、聚餐、活动、看医生、开会。
+- view_events：用户询问今天/明天/本周/本月有什么安排、日程、事件。
+- complete_todo：用户说完成、做完、搞定、勾选某个已有任务。
+- delete_event：用户说删除、取消某个事件或日程。
 
-用户："我想创建一个高优先级的任务，整理季度销售报告"
-返回：
+标题提取铁律：
+- title 必须是核心动作 + 对象，短而自然，例如“写完论文”“修改论文”“整理销售报告”“需求评审会”。
+- 绝对不要把完整原话放进 title。
+- 必须删除这些口语/礼貌/指令词：请、请你、帮我、为我、给我、麻烦、我想、我要、我需要、能不能、可以、创建一个、新建一个、添加一个、任务、待办、事件、日程、一下、吧、吗、呢、啊、哦、嗯、那个、这个、就是、然后。
+- “把/将 + 对象 + 动作”必须改成“动作 + 对象”：例如“将论文写完” -> “写完论文”，“把报告整理一下” -> “整理报告”。
+- 对 create_todo 要保留动作词；不要把“写完论文”简化成“论文”。
+- 对 complete_todo，title 应该是已有任务的名称或核心对象，可以去掉“完成/做完/搞定”。
+
+日期与时间：
+- 今天 -> __CURRENT_DATE__
+- 明天 -> __TOMORROW_DATE__
+- 后天 -> __DAY_AFTER_TOMORROW_DATE__
+- 没有日期：创建任务/事件默认 date = __CURRENT_DATE__。
+- 没有明确几点：time = null，end_time = null。
+- “下午三点” -> 15:00；“晚上八点” -> 20:00；“九点半” -> 09:30 或结合上午/下午判断。
+- 任务通常不需要 time/end_time，除非用户明确说几点提醒或几点做。
+
+优先级与提醒：
+- 重要、紧急、必须、尽快 -> high
+- 不急、有空、低优先级 -> low
+- 未提及 -> create_todo/create_event 使用 medium，其他 intent 使用 null
+- “提前 10 分钟提醒” -> reminder_minutes = 10；未提及提醒 -> null
+
+示例：
+用户：请你为我创建一个今天将论文写完的任务
+输出：
 {
   "intent": "create_todo",
-  "title": "整理季度销售报告",
-  "date": "{current_date}",
+  "title": "写完论文",
+  "date": "__CURRENT_DATE__",
   "time": null,
   "end_time": null,
   "location": null,
   "description": null,
-  "priority": "high",
+  "priority": "medium",
   "reminder_minutes": null
 }
 
-用户："嗨你好，那个就是我想问一下，明天有没有什么安排"
-返回：
+用户：帮我添加一个明天修改论文的待办
+输出：
+{
+  "intent": "create_todo",
+  "title": "修改论文",
+  "date": "__TOMORROW_DATE__",
+  "time": null,
+  "end_time": null,
+  "location": null,
+  "description": null,
+  "priority": "medium",
+  "reminder_minutes": null
+}
+
+用户：明天下午三点在会议室A和产品经理开需求评审会，提前十分钟提醒
+输出：
+{
+  "intent": "create_event",
+  "title": "需求评审会",
+  "date": "__TOMORROW_DATE__",
+  "time": "15:00",
+  "end_time": "16:00",
+  "location": "会议室A",
+  "description": "和产品经理开会",
+  "priority": "medium",
+  "reminder_minutes": 10
+}
+
+用户：今天有什么安排
+输出：
 {
   "intent": "view_events",
   "title": null,
-  "date": "{tomorrow_date}",
+  "date": "__CURRENT_DATE__",
   "time": null,
   "end_time": null,
   "location": null,
   "description": null,
   "priority": null,
   "reminder_minutes": null
-}"""
+}
+"""
 
 
 def get_api_key() -> str:
@@ -171,7 +162,192 @@ def get_date_str(offset_days: int = 0) -> str:
     return target.strftime("%Y-%m-%d")
 
 
-def parse_with_llm(text: str, api_key: Optional[str] = None) -> Optional[dict]:
+def _render_system_prompt() -> str:
+    now = datetime.now()
+    return (
+        SYSTEM_PROMPT
+        .replace("__CURRENT_DATE__", get_date_str(0))
+        .replace("__TOMORROW_DATE__", get_date_str(1))
+        .replace("__DAY_AFTER_TOMORROW_DATE__", get_date_str(2))
+        .replace("__CURRENT_TIME__", now.strftime("%H:%M"))
+    )
+
+
+def _extract_json(content: str) -> Optional[dict[str, Any]]:
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?", "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(r"```$", "", text).strip()
+
+    candidates = [text]
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidates.append(text[start:end + 1])
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _clean_title(
+    value: Any,
+    intent: str,
+    original_text: str,
+    location: Optional[str] = None,
+) -> Optional[str]:
+    title = "" if value is None else str(value)
+    if title.strip().lower() in {"", "null", "none", "无", "没有"}:
+        title = original_text
+
+    title = title.strip()
+    title = re.sub(r"[，。！？、；：,.!?;:]", " ", title)
+    title = re.sub(r"\s+", "", title)
+
+    fillers = [
+        "请你为我",
+        "请你帮我",
+        "麻烦你帮我",
+        "请帮我",
+        "麻烦帮我",
+        "你为我",
+        "你帮我",
+        "请你",
+        "帮我",
+        "为我",
+        "给我",
+        "麻烦",
+        "拜托",
+        "谢谢",
+        "辛苦了",
+        "我想",
+        "我要",
+        "我需要",
+        "能不能",
+        "可以",
+        "请",
+        "一下",
+        "吧",
+        "吗",
+        "呢",
+        "啊",
+        "哦",
+        "嗯",
+        "那个",
+        "这个",
+        "就是",
+        "然后",
+        "所以",
+    ]
+    for filler in fillers:
+        title = title.replace(filler, "")
+
+    title = re.sub(r"(创建|新建|添加|安排|设置)(一个|一项|个)?", "", title)
+    title = re.sub(r"(今天|明天|后天|本周|这周|本月|这个月|下周[一二三四五六日天]?)", "", title)
+    title = re.sub(r"(上午|下午|晚上|早上|中午)", "", title)
+    title = re.sub(r"\d{1,2}[点时](\d{1,2}分?)?", "", title)
+    title = re.sub(r"[一二三四五六七八九十两]+点(半|[一二三四五六七八九十两]+分?)?", "", title)
+    title = re.sub(r"(高优先级?|中优先级?|低优先级?|重要|紧急|不急|普通|一般)", "", title)
+    title = re.sub(r"^(任务|待办|事项|事件|日程)", "", title)
+    title = re.sub(r"(的)?(任务|待办|事项|事件|日程)$", "", title)
+
+    if location:
+        escaped_location = re.escape(str(location).strip())
+        if escaped_location:
+            title = re.sub(rf"在?{escaped_location}", "", title, flags=re.IGNORECASE)
+
+    action_pattern = "|".join(TITLE_ACTIONS)
+    title = re.sub(rf"^(把|将)(.+?)({action_pattern})(一下)?$", r"\3\2", title)
+
+    if intent in {"complete_todo", "delete_event"}:
+        title = re.sub(r"^(完成|做完|搞定|标记|勾选|删除|取消|移除)", "", title)
+        title = re.sub(r"(完成|做完|搞定|删除|取消|移除)$", "", title)
+    elif intent == "create_event":
+        title = re.sub(r"^(和|与|跟|同).+?(开|参加|进行|举行|安排)", "", title)
+        title = re.sub(r"^在.+?(开|参加|进行|举行|安排)", "", title)
+        title = re.sub(r"^(开|参加|进行|举行|安排)", "", title)
+    else:
+        title = re.sub(rf"^(.+?)({action_pattern})$", r"\2\1", title)
+
+    title = re.sub(r"\s+", "", title).strip()
+    return title or None
+
+
+def _valid_date(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+    except ValueError:
+        return None
+
+
+def _valid_time(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not re.match(r"^\d{2}:\d{2}$", value):
+        return None
+    hour, minute = value.split(":")
+    if 0 <= int(hour) <= 23 and 0 <= int(minute) <= 59:
+        return value
+    return None
+
+
+def _coerce_reminder(value: Any) -> Optional[int]:
+    if value in (None, "", "null"):
+        return None
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        return None
+    return minutes if minutes >= 0 else None
+
+
+def _sanitize_result(parsed: dict[str, Any], original_text: str) -> dict[str, Any]:
+    intent = parsed.get("intent")
+    if intent not in ALLOWED_INTENTS:
+        intent = "unknown"
+
+    title = _clean_title(parsed.get("title"), intent, original_text, parsed.get("location"))
+    if intent == "create_todo" and not title:
+        title = "新任务"
+    elif intent == "create_event" and not title:
+        title = "新事件"
+    elif intent in {"view_events", "unknown"}:
+        title = None
+
+    date = _valid_date(parsed.get("date"))
+    if not date and intent in {"create_todo", "create_event", "view_events"}:
+        date = get_date_str(0)
+
+    time = _valid_time(parsed.get("time"))
+    end_time = _valid_time(parsed.get("end_time"))
+    if intent == "create_todo":
+        time = None
+        end_time = None
+
+    priority = parsed.get("priority")
+    if priority not in {"high", "medium", "low"}:
+        priority = "medium" if intent in {"create_todo", "create_event"} else None
+
+    return {
+        "intent": intent,
+        "title": title,
+        "date": date,
+        "time": time,
+        "end_time": end_time,
+        "location": parsed.get("location") or None,
+        "description": parsed.get("description") or None,
+        "priority": priority,
+        "reminder_minutes": _coerce_reminder(parsed.get("reminder_minutes")),
+    }
+
+
+def parse_with_llm(text: str, api_key: Optional[str] = None) -> Optional[dict[str, Any]]:
     if api_key is None:
         api_key = get_api_key()
 
@@ -179,50 +355,36 @@ def parse_with_llm(text: str, api_key: Optional[str] = None) -> Optional[dict]:
         return None
 
     try:
-        now = datetime.now()
-        system_prompt = SYSTEM_PROMPT.format(
-            current_date=get_date_str(0),
-            tomorrow_date=get_date_str(1),
-            day_after_tomorrow_date=get_date_str(2),
-            current_time=now.strftime("%H:%M")
-        )
-
         response = requests.post(
             DEEPSEEK_API_URL,
             headers={
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             },
             json={
-                "model": "deepseek-chat",
+                "model": DEEPSEEK_MODEL,
                 "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text}
+                    {"role": "system", "content": _render_system_prompt()},
+                    {"role": "user", "content": text},
                 ],
-                "temperature": 0.1,
-                "max_tokens": 800
+                "temperature": 0,
+                "max_tokens": 500,
             },
-            timeout=15
+            timeout=20,
         )
 
-        if response.status_code == 200:
-            result = response.json()
-            content = result["choices"][0]["message"]["content"]
-            content = content.strip()
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+        if response.status_code != 200:
+            print(f"DeepSeek API error {response.status_code}: {response.text[:500]}")
+            return None
 
-            try:
-                parsed = json.loads(content)
-                if "intent" in parsed:
-                    return parsed
-            except json.JSONDecodeError:
-                pass
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        parsed = _extract_json(content)
+        if not parsed:
+            print(f"DeepSeek returned non-JSON content: {content[:500]}")
+            return None
 
-        return None
+        return _sanitize_result(parsed, text)
 
     except Exception as e:
         print(f"LLM API error: {e}")

@@ -192,64 +192,56 @@ function App() {
   };
 
   const parseWithHybrid = async (text: string): Promise<ParsedCommand> => {
-    if (apiKey) {
-      // 显示调用状态
-      setLlmStatus('calling');
-      setLlmRawText(text);
-      setLlmResult(null);
-      setLlmError('');
+    setLlmStatus('calling');
+    setLlmRawText(text);
+    setLlmResult(null);
+    setLlmError('');
 
-      // 延迟一下显示解析中状态（需要在 try 外部声明以便 finally 清理）
-      let parsingTimer: ReturnType<typeof setTimeout> | null = null;
+    let parsingTimer: ReturnType<typeof setTimeout> | null = null;
 
-      try {
-        parsingTimer = setTimeout(() => setLlmStatus('parsing'), 800);
+    try {
+      parsingTimer = setTimeout(() => setLlmStatus('parsing'), 800);
 
-        const response = await fetch('http://localhost:8000/api/voice/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, use_llm: true })
-        });
-        const data = await response.json();
+      const response = await fetch('http://localhost:8000/api/voice/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, use_llm: true, api_key: apiKey || undefined })
+      });
+      const data = await response.json();
 
-        if (data.success && data.data.source === 'llm') {
-          const result = data.data;
-          // 显示结果
-          setLlmResult(result);
-          setLlmStatus('result');
+      if (data.success && data.data.source === 'llm') {
+        const result = data.data;
+        setLlmResult(result);
+        setLlmStatus('result');
 
-          // 返回 LLM 解析结果，标记 source
-          return {
-            intent: result.intent || 'unknown',
-            title: result.title,
-            date: result.date,
-            time: result.time,
-            end_time: result.end_time,
-            location: result.location,
-            description: result.description,
-            priority: result.priority,
-            reminderMinutes: result.reminder_minutes,
-            rawText: text,
-            source: 'llm',
-          };
-        }
-
-        // 后端返回了非 LLM 结果，降级到 regex
-        if (data.data?.llm_error) {
-          console.warn('LLM error from backend:', data.data.llm_error);
-          setLlmError('LLM 解析失败: ' + data.data.llm_error + '（使用本地解析）');
-          setLlmStatus('error');
-        } else {
-          setLlmStatus('idle');
-        }
-      } catch (err) {
-        console.error('LLM parse error:', err);
-        setLlmError('LLM 服务连接失败，使用本地解析');
-        setLlmStatus('error');
-        // 不返回，继续降级到 regex parser
-      } finally {
-        if (parsingTimer) clearTimeout(parsingTimer);
+        return {
+          intent: result.intent || 'unknown',
+          title: result.title,
+          date: result.date,
+          time: result.time,
+          end_time: result.end_time,
+          location: result.location,
+          description: result.description,
+          priority: result.priority,
+          reminderMinutes: result.reminder_minutes,
+          rawText: text,
+          source: 'llm',
+        };
       }
+
+      if (data.data?.llm_error) {
+        console.warn('LLM error from backend:', data.data.llm_error);
+        setLlmError('DeepSeek 解析失败，已使用本地解析');
+        setLlmStatus('error');
+      } else {
+        setLlmStatus('idle');
+      }
+    } catch (err) {
+      console.error('LLM parse error:', err);
+      setLlmError('语义解析服务连接失败，已使用本地解析');
+      setLlmStatus('error');
+    } finally {
+      if (parsingTimer) clearTimeout(parsingTimer);
     }
 
     // 降级：使用前端正则解析
@@ -291,6 +283,9 @@ function App() {
       showCommandConfirmation(command);
       return;
     }
+
+    setLlmStatus('idle');
+    setLlmResult(null);
 
     executeCommand(command);
   };

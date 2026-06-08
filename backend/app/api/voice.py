@@ -104,7 +104,8 @@ def parse_voice():
     text = normalize_recognized_text(data['text'])
     use_llm = data.get('use_llm', True)
 
-    effective_key = API_KEY or os.environ.get("DEEPSEEK_API_KEY", "")
+    request_key = data.get('api_key') or ''
+    effective_key = request_key or API_KEY or os.environ.get("DEEPSEEK_API_KEY", "")
 
     if use_llm and effective_key:
         try:
@@ -112,6 +113,15 @@ def parse_voice():
             if result:
                 result['source'] = 'llm'
                 return jsonify({'success': True, 'data': result})
+            return jsonify({
+                'success': True,
+                'data': {
+                    'source': 'regex',
+                    'use_frontend_parser': True,
+                    'has_llm_key': True,
+                    'llm_error': 'DeepSeek 未返回可用的 JSON 解析结果'
+                }
+            })
         except Exception as e:
             print(f"[Voice API] LLM parse error: {e}")
             import traceback
@@ -122,6 +132,7 @@ def parse_voice():
                 'data': {
                     'source': 'regex',
                     'use_frontend_parser': True,
+                    'has_llm_key': True,
                     'llm_error': str(e)
                 }
             })
@@ -130,6 +141,7 @@ def parse_voice():
         'success': True,
         'data': {
             'source': 'regex',
-            'use_frontend_parser': True
+            'use_frontend_parser': True,
+            'has_llm_key': bool(effective_key)
         }
     })
