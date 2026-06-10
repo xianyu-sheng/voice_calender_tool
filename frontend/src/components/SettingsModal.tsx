@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 interface VoiceConfig {
   deepseekApiKey: string;
+  weatherCity: string;
 }
 
 interface SettingsModalProps {
@@ -18,17 +19,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   currentConfig
 }) => {
   const [deepseekKey, setDeepseekKey] = useState('');
+  const [weatherCity, setWeatherCity] = useState('北京');
   const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setDeepseekKey(currentConfig.deepseekApiKey);
+      setWeatherCity(currentConfig.weatherCity || '北京');
     }
   }, [isOpen, currentConfig]);
 
   const handleSave = () => {
     onSave({
       deepseekApiKey: deepseekKey,
+      weatherCity,
     });
     onClose();
   };
@@ -55,6 +59,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <p>使用本地 Vosk 中文模型将语音转为文字。</p>
               <p>无需联网，不需要配置云端语音 API Key。</p>
             </div>
+          </div>
+
+          <div className="sidebar-divider" style={{ margin: '16px 0' }}></div>
+
+          <div className="settings-info">
+            <div className="info-text">
+              <h3>天气</h3>
+              <p>使用 Open-Meteo 获取当前城市未来 16 天天气。</p>
+              <p>超过预报范围的日期会显示默认符号。</p>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>天气城市</label>
+            <input
+              type="text"
+              value={weatherCity}
+              onChange={e => setWeatherCity(e.target.value)}
+              placeholder="例如：北京、上海、广州"
+            />
+            <p className="form-hint">保存后会自动刷新天气预报。</p>
           </div>
 
           <div className="sidebar-divider" style={{ margin: '16px 0' }}></div>

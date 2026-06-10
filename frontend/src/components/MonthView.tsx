@@ -1,5 +1,7 @@
 import React from 'react';
-import { toLocalDateStr } from '../utils/dateUtils';
+import { getCalendarMeta, toLocalDateStr } from '../utils/dateUtils';
+import { getWeatherDisplay } from '../utils/weatherUtils';
+import type { WeatherForecast } from '../utils/weatherUtils';
 
 interface Event {
   id: number;
@@ -23,6 +25,7 @@ interface MonthViewProps {
   currentDate: Date;
   events: Event[];
   todos: TodoItem[];
+  weatherForecasts: Record<string, WeatherForecast>;
   onDateClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
   onTodoToggle: (id: number) => void;
@@ -33,6 +36,7 @@ const MonthView: React.FC<MonthViewProps> = ({
   currentDate,
   events,
   todos,
+  weatherForecasts,
   onDateClick,
   onEventClick,
   onTodoToggle,
@@ -76,37 +80,43 @@ const MonthView: React.FC<MonthViewProps> = ({
     const days = [];
     const today = new Date();
 
-    const prevMonthDays = getDaysInMonth(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-    for (let i = firstDay - 1; i >= 0; i--) {
-      const day = prevMonthDays - i;
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, day);
-      days.push(
-        <div key={`prev-${day}`} className="calendar-day other-month" onClick={() => onDateClick(date)}>
-          <span className="day-number">{day}</span>
-        </div>
-      );
-    }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    const renderDay = (date: Date, key: string, isCurrentMonth: boolean) => {
       const isToday = date.toDateString() === today.toDateString();
-      const dayEvents = getEventsForDate(date);
-      const dayTodos = getTodosForDate(date);
+      const dateStr = toLocalDateStr(date);
+      const meta = getCalendarMeta(date);
+      const dayEvents = isCurrentMonth ? getEventsForDate(date) : [];
+      const dayTodos = isCurrentMonth ? getTodosForDate(date) : [];
       const hasContent = dayEvents.length > 0 || dayTodos.length > 0;
+      const weather = getWeatherDisplay(weatherForecasts[dateStr]);
+      const metaLabel = meta.holiday || meta.solarTerm || meta.festival || meta.lunar;
 
-      days.push(
+      return (
         <div
-          key={day}
-          className={`calendar-day ${isToday ? 'today' : ''} ${hasContent ? 'has-events' : ''}`}
+          key={key}
+          className={`calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${hasContent ? 'has-events' : ''} ${meta.holidayType === 'off' ? 'holiday-off' : ''} ${meta.holidayType === 'work' ? 'holiday-work' : ''}`}
           onClick={() => handleDayClick(date)}
         >
-          <div className="day-header">
+          <div className="month-day-header">
             <span className={`day-number ${isToday ? 'today-number' : ''}`}>
-              {day}
+              {date.getDate()}
             </span>
             {hasContent && (
               <span className="event-count">{dayEvents.length + dayTodos.length}</span>
             )}
+          </div>
+          <div className="day-meta-row">
+            <span className={`day-lunar ${meta.festival || meta.solarTerm || meta.holiday ? 'festival' : ''}`}>
+              {metaLabel}
+            </span>
+            {meta.holidayType && (
+              <span className={`holiday-badge ${meta.holidayType}`}>
+                {meta.holidayType === 'off' ? '休' : '班'}
+              </span>
+            )}
+          </div>
+          <div className={`day-weather ${weather.unavailable ? 'unavailable' : ''}`} title={weather.label}>
+            <span className="weather-icon">{weather.icon}</span>
+            <span className="weather-temp">{weather.temperature}</span>
           </div>
           {hasContent && (
             <div className="event-dots">
@@ -133,16 +143,24 @@ const MonthView: React.FC<MonthViewProps> = ({
           )}
         </div>
       );
+    };
+
+    const prevMonthDays = getDaysInMonth(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const day = prevMonthDays - i;
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, day);
+      days.push(renderDay(date, `prev-${day}`, false));
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+      days.push(renderDay(date, String(day), true));
     }
 
     const remainingDays = 42 - days.length;
     for (let day = 1; day <= remainingDays; day++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, day);
-      days.push(
-        <div key={`next-${day}`} className="calendar-day other-month" onClick={() => onDateClick(date)}>
-          <span className="day-number">{day}</span>
-        </div>
-      );
+      days.push(renderDay(date, `next-${day}`, false));
     }
 
     return days;

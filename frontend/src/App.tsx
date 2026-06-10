@@ -15,6 +15,7 @@ import { useReminder } from './hooks/useReminder'
 import { parseVoiceCommand } from './utils/voiceCommandParser'
 import type { ParsedCommand } from './utils/voiceCommandParser'
 import { toLocalDateStr, todayStr } from './utils/dateUtils'
+import type { WeatherForecast } from './utils/weatherUtils'
 import './App.css'
 
 interface CalendarEvent {
@@ -60,6 +61,10 @@ function App() {
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
+  const [weatherCity, setWeatherCity] = useState<string>(() => localStorage.getItem('weather_city') || '北京');
+  const [weatherForecasts, setWeatherForecasts] = useState<Record<string, WeatherForecast>>({});
+  const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [weatherError, setWeatherError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // LLM 可视化状态
@@ -88,6 +93,7 @@ function App() {
     fetchCalendars();
     fetchEvents();
     fetchTodos();
+    fetchWeather(weatherCity);
     requestPermission();
     autoPostponeTodos();
 
@@ -248,6 +254,33 @@ function App() {
     const regexResult = parseVoiceCommand(text);
     regexResult.source = 'regex';
     return regexResult;
+  };
+
+  const fetchWeather = async (city = weatherCity) => {
+    const normalizedCity = city.trim() || '北京';
+    setWeatherStatus('loading');
+    setWeatherError('');
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/weather?city=${encodeURIComponent(normalizedCity)}`);
+      const data = await response.json();
+      if (data.success) {
+        const forecasts: WeatherForecast[] = data.data.forecasts || [];
+        const forecastMap = forecasts.reduce<Record<string, WeatherForecast>>((acc, forecast) => {
+          acc[forecast.date] = forecast;
+          return acc;
+        }, {});
+        setWeatherForecasts(forecastMap);
+        setWeatherStatus('idle');
+      } else {
+        setWeatherError(data.error || '天气获取失败');
+        setWeatherStatus('error');
+      }
+    } catch (error) {
+      console.error('Error fetching weather:', error);
+      setWeatherError('天气服务连接失败');
+      setWeatherStatus('error');
+    }
   };
 
   const commandNeedsConfirmation = (command: ParsedCommand) => {
@@ -540,10 +573,15 @@ function App() {
     }
   };
 
-  const handleSaveApiKey = (config: { deepseekApiKey: string }) => {
+  const handleSaveSettings = (config: { deepseekApiKey: string; weatherCity: string }) => {
     setApiKey(config.deepseekApiKey);
 
     localStorage.setItem('deepseek_api_key', config.deepseekApiKey);
+
+    const nextWeatherCity = config.weatherCity.trim() || '北京';
+    setWeatherCity(nextWeatherCity);
+    localStorage.setItem('weather_city', nextWeatherCity);
+    fetchWeather(nextWeatherCity);
 
     const backendConfig: any = {};
     if (config.deepseekApiKey) backendConfig.api_key = config.deepseekApiKey;
@@ -554,7 +592,7 @@ function App() {
       body: JSON.stringify(backendConfig)
     });
 
-    setVoiceFeedback('语音设置已保存');
+    setVoiceFeedback('设置已保存');
     setTimeout(() => setVoiceFeedback(null), 2000);
   };
 
@@ -781,6 +819,7 @@ function App() {
                 currentDate={currentDate}
                 events={filteredEvents}
                 todos={todos}
+                weatherForecasts={weatherForecasts}
                 onDateClick={handleDateSelect}
                 onEventClick={handleEventClick}
                 onTodoToggle={handleToggleTodo}
@@ -792,6 +831,7 @@ function App() {
                 currentDate={currentDate}
                 events={filteredEvents}
                 todos={todos}
+                weatherForecasts={weatherForecasts}
                 onTimeClick={handleTimeClick}
                 onEventClick={handleEventClick}
                 onEventDrop={handleEventDrop}
@@ -803,6 +843,10 @@ function App() {
                 currentDate={currentDate}
                 events={filteredEvents}
                 todos={getTodosForDate(currentDate)}
+                weatherForecasts={weatherForecasts}
+                weatherCity={weatherCity}
+                weatherStatus={weatherStatus}
+                weatherError={weatherError}
                 onTimeClick={handleTimeClick}
                 onEventClick={handleEventClick}
                 onTodoToggle={handleToggleTodo}
@@ -867,9 +911,10 @@ function App() {
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onSave={handleSaveApiKey}
+        onSave={handleSaveSettings}
         currentConfig={{
           deepseekApiKey: apiKey,
+          weatherCity,
         }}
       />
     </div>

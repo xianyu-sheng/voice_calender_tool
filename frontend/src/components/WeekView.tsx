@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { toLocalDateStr } from '../utils/dateUtils';
+import { getCalendarMeta, toLocalDateStr } from '../utils/dateUtils';
+import { getWeatherDisplay } from '../utils/weatherUtils';
+import type { WeatherForecast } from '../utils/weatherUtils';
 
 interface Event {
   id: number;
@@ -22,6 +24,7 @@ interface WeekViewProps {
   currentDate: Date;
   events: Event[];
   todos?: TodoItem[];
+  weatherForecasts: Record<string, WeatherForecast>;
   onTimeClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
   onEventDrop?: (eventId: number, newStartTime: Date, newEndTime: Date) => void;
@@ -32,6 +35,7 @@ const WeekView: React.FC<WeekViewProps> = ({
   currentDate,
   events,
   todos = [],
+  weatherForecasts,
   onTimeClick,
   onEventClick,
   onEventDrop
@@ -127,16 +131,27 @@ const WeekView: React.FC<WeekViewProps> = ({
         <div className="time-gutter-header"></div>
         {weekDates.map((date, index) => {
           const isToday = date.toDateString() === today.toDateString();
+          const dateStr = toLocalDateStr(date);
+          const meta = getCalendarMeta(date);
+          const weather = getWeatherDisplay(weatherForecasts[dateStr]);
+          const metaLabel = meta.holiday || meta.solarTerm || meta.festival || meta.lunar;
           const dayTodos = getTodosForDate(date);
           const completedTodos = dayTodos.filter(t => t.completed).length;
           return (
             <div
               key={index}
-              className={`week-day-header ${isToday ? 'today' : ''}`}
+              className={`week-day-header ${isToday ? 'today' : ''} ${meta.holidayType === 'off' ? 'holiday-off' : ''} ${meta.holidayType === 'work' ? 'holiday-work' : ''}`}
             >
               <span className="day-name">{dayNames[index]}</span>
               <span className={`day-date ${isToday ? 'today-date' : ''}`}>
                 {date.getDate()}
+              </span>
+              <span className={`week-lunar ${meta.festival || meta.solarTerm || meta.holiday ? 'festival' : ''}`}>
+                {metaLabel}
+              </span>
+              <span className={`week-weather ${weather.unavailable ? 'unavailable' : ''}`} title={weather.label}>
+                <span>{weather.icon}</span>
+                <span>{weather.temperature}</span>
               </span>
               {dayTodos.length > 0 && (
                 <div className="week-todos-indicator">

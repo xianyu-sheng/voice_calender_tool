@@ -28,6 +28,11 @@ D:\voice_cal_venv\Scripts\python.exe -m PyInstaller --onefile --noconsole --name
     --hidden-import "sqlalchemy" ^
     --hidden-import "vosk" ^
     --hidden-import "requests" ^
+    --hidden-import "webview" ^
+    --hidden-import "pythonnet" ^
+    --hidden-import "clr_loader" ^
+    --hidden-import "proxy_tools" ^
+    --hidden-import "bottle" ^
     --hidden-import "urllib3" ^
     --hidden-import "certifi" ^
     --hidden-import "charset_normalizer" ^

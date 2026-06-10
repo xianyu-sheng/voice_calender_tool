@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from app import db
-from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp
+from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp, weather_bp
 
 # 加载 .env 文件中的环境变量
 load_dotenv()
@@ -20,6 +20,7 @@ app.register_blueprint(calendars_bp)
 app.register_blueprint(reminders_bp)
 app.register_blueprint(todos_bp)
 app.register_blueprint(voice_bp)
+app.register_blueprint(weather_bp)
 
 with app.app_context():
     db.create_all()

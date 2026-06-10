@@ -1,5 +1,7 @@
 import React from 'react';
-import { toLocalDateStr } from '../utils/dateUtils';
+import { getCalendarMeta, toLocalDateStr } from '../utils/dateUtils';
+import { getWeatherDisplay } from '../utils/weatherUtils';
+import type { WeatherForecast } from '../utils/weatherUtils';
 
 interface Event {
   id: number;
@@ -24,6 +26,10 @@ interface DayViewProps {
   currentDate: Date;
   events: Event[];
   todos: TodoItem[];
+  weatherForecasts: Record<string, WeatherForecast>;
+  weatherCity: string;
+  weatherStatus: 'idle' | 'loading' | 'error';
+  weatherError: string;
   onTimeClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
   onTodoToggle: (id: number) => void;
@@ -37,6 +43,10 @@ const DayView: React.FC<DayViewProps> = ({
   currentDate,
   events,
   todos,
+  weatherForecasts,
+  weatherCity,
+  weatherStatus,
+  weatherError,
   onTimeClick,
   onEventClick,
   onTodoToggle,
@@ -60,6 +70,10 @@ const DayView: React.FC<DayViewProps> = ({
   const today = new Date();
   const isToday = currentDate.toDateString() === today.toDateString();
   const currentDateStr = toLocalDateStr(currentDate);
+  const calendarMeta = getCalendarMeta(currentDate);
+  const weather = getWeatherDisplay(weatherForecasts[currentDateStr]);
+  const metaHighlights = [calendarMeta.holiday, calendarMeta.solarTerm, calendarMeta.festival]
+    .filter((item, index, array): item is string => Boolean(item) && array.indexOf(item) === index);
 
   const completedTodos = todos.filter(t => t.completed).length;
   const todoProgress = todos.length > 0
@@ -104,6 +118,31 @@ const DayView: React.FC<DayViewProps> = ({
           <span className={`day-header-date ${isToday ? 'today-date' : ''}`}>
             {currentDate.getMonth() + 1}月{currentDate.getDate()}日 · {['周日','周一','周二','周三','周四','周五','周六'][currentDate.getDay()]}
           </span>
+        </div>
+        <div className="day-meta-summary">
+          <div className="day-meta-tags">
+            <span>{calendarMeta.lunarMonth}{calendarMeta.lunarDay}</span>
+            {metaHighlights.map(item => (
+              <span key={item} className="meta-tag-highlight">{item}</span>
+            ))}
+            {calendarMeta.holidayType && (
+              <span className={`holiday-badge ${calendarMeta.holidayType}`}>
+                {calendarMeta.holidayType === 'off' ? '休' : '班'}
+              </span>
+            )}
+          </div>
+          <div className={`day-weather-summary ${weather.unavailable ? 'unavailable' : ''}`}>
+            <span className="day-weather-city">{weatherCity}</span>
+            <span className="day-weather-icon">{weather.icon}</span>
+            <span className="day-weather-label">
+              {weatherStatus === 'loading'
+                ? '天气更新中'
+                : weatherStatus === 'error'
+                  ? weatherError || '天气获取失败'
+                  : weather.label}
+            </span>
+            {weather.temperature && <span className="day-weather-temp">{weather.temperature}</span>}
+          </div>
         </div>
       </div>
 

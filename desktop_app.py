@@ -48,6 +48,7 @@ flask_app.register_blueprint(backend_api.calendars_bp)
 flask_app.register_blueprint(backend_api.reminders_bp)
 flask_app.register_blueprint(backend_api.todos_bp)
 flask_app.register_blueprint(backend_api.voice_bp)
+flask_app.register_blueprint(backend_api.weather_bp)
 
 with flask_app.app_context():
     try:
@@ -120,11 +121,61 @@ def open_browser_when_ready():
     open_browser()
 
 
+def run_server():
+    flask_app.run(debug=False, host="0.0.0.0", port=8000, use_reloader=False)
+
+
+def wait_until_ready(timeout_seconds=10):
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if is_existing_app_running():
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def open_desktop_window():
+    try:
+        import webview
+
+        webview.create_window(
+            "语音日历工具",
+            APP_URL,
+            width=1280,
+            height=820,
+            min_size=(960, 640),
+        )
+        webview.start()
+        return True
+    except Exception as e:
+        print(f"WebView unavailable, fallback to browser: {e}")
+        return False
+
+
+def keep_process_alive():
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        return
+
+
 if __name__ == "__main__":
     if is_existing_app_running():
-        open_browser()
+        if not open_desktop_window():
+            open_browser()
         sys.exit(0)
 
-    if getattr(sys, "frozen", False):
-        threading.Thread(target=open_browser_when_ready, daemon=True).start()
-    flask_app.run(debug=False, host="0.0.0.0", port=8000)
+    try:
+        import webview  # noqa: F401
+
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+        wait_until_ready()
+        if not open_desktop_window():
+            open_browser()
+            keep_process_alive()
+    except Exception:
+        if getattr(sys, "frozen", False):
+            threading.Thread(target=open_browser_when_ready, daemon=True).start()
+        run_server()
