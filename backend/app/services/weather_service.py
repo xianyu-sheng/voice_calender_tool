@@ -8,6 +8,7 @@ import requests
 
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+REVERSE_GEOCODING_URL = "https://api.bigdatacloud.net/data/reverse-geocode-client"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 FORECAST_DAYS = 16
 CACHE_TTL_SECONDS = 30 * 60
@@ -22,12 +23,15 @@ class CacheEntry:
 _weather_cache: dict[str, CacheEntry] = {}
 
 
-def _cache_key(city: str) -> str:
-    return city.strip().lower() or "北京"
+def _city_cache_key(city: str) -> str:
+    return f"city:{city.strip().lower()}"
 
 
-def _get_cached(city: str) -> dict[str, Any] | None:
-    key = _cache_key(city)
+def _coordinate_cache_key(latitude: float, longitude: float) -> str:
+    return f"coord:{latitude:.4f},{longitude:.4f}"
+
+
+def _get_cached(key: str) -> dict[str, Any] | None:
     entry = _weather_cache.get(key)
     if not entry:
         return None
@@ -36,8 +40,8 @@ def _get_cached(city: str) -> dict[str, Any] | None:
     return entry.data
 
 
-def _set_cached(city: str, data: dict[str, Any]) -> None:
-    _weather_cache[_cache_key(city)] = CacheEntry(datetime.now(), data)
+def _set_cached(key: str, data: dict[str, Any]) -> None:
+    _weather_cache[key] = CacheEntry(datetime.now(), data)
 
 
 def _geocode_city(city: str) -> dict[str, Any]:
@@ -76,7 +80,41 @@ def _fetch_forecast(latitude: float, longitude: float) -> dict[str, Any]:
     return response.json()
 
 
-def _normalize_forecast(city: str, place: dict[str, Any], forecast: dict[str, Any]) -> dict[str, Any]:
+def _reverse_geocode(latitude: float, longitude: float) -> dict[str, Any]:
+    response = requests.get(
+        REVERSE_GEOCODING_URL,
+        params={
+            "latitude": latitude,
+            "longitude": longitude,
+            "localityLanguage": "zh",
+        },
+        timeout=8,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    city = payload.get("city") or payload.get("locality")
+    subdivision = payload.get("principalSubdivision")
+
+    if city and subdivision and city.endswith(("区", "區", "县")) and subdivision.endswith("市"):
+        place_name = subdivision
+    else:
+        place_name = city or subdivision or payload.get("locality") or "当前位置"
+
+    return {
+        "name": place_name,
+        "country": payload.get("countryName"),
+        "admin1": subdivision,
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
+
+def _normalize_forecast(
+    display_name: str,
+    place: dict[str, Any],
+    forecast: dict[str, Any],
+    source: str,
+) -> dict[str, Any]:
     daily = forecast.get("daily") or {}
     times = daily.get("time") or []
     max_temps = daily.get("temperature_2m_max") or []
@@ -98,11 +136,13 @@ def _normalize_forecast(city: str, place: dict[str, Any], forecast: dict[str, An
 
     generated_at = datetime.now().isoformat(timespec="seconds")
     available_until = (date.today() + timedelta(days=max(FORECAST_DAYS - 1, 0))).isoformat()
+    place_name = place.get("name") or display_name
 
     return {
-        "city": city,
+        "city": place_name,
+        "source": source,
         "place": {
-            "name": place.get("name") or city,
+            "name": place_name,
             "country": place.get("country"),
             "admin1": place.get("admin1"),
             "latitude": place.get("latitude"),
@@ -116,13 +156,43 @@ def _normalize_forecast(city: str, place: dict[str, Any], forecast: dict[str, An
 
 
 def get_weather(city: str) -> dict[str, Any]:
-    normalized_city = city.strip() or "北京"
-    cached = _get_cached(normalized_city)
+    normalized_city = city.strip()
+    if not normalized_city:
+        raise ValueError("需要城市名或经纬度")
+
+    cache_key = _city_cache_key(normalized_city)
+    cached = _get_cached(cache_key)
     if cached:
         return {**cached, "from_cache": True}
 
     place = _geocode_city(normalized_city)
     forecast = _fetch_forecast(float(place["latitude"]), float(place["longitude"]))
-    data = _normalize_forecast(normalized_city, place, forecast)
-    _set_cached(normalized_city, data)
+    data = _normalize_forecast(normalized_city, place, forecast, "city")
+    _set_cached(cache_key, data)
+    return {**data, "from_cache": False}
+
+
+def get_weather_by_coordinates(latitude: float, longitude: float, label: str = "当前位置") -> dict[str, Any]:
+    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        raise ValueError("经纬度范围无效")
+
+    cache_key = _coordinate_cache_key(latitude, longitude)
+    cached = _get_cached(cache_key)
+    if cached:
+        return {**cached, "from_cache": True}
+
+    try:
+        place = _reverse_geocode(latitude, longitude)
+    except Exception:
+        place = {
+            "name": label or "当前位置",
+            "country": None,
+            "admin1": None,
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+
+    forecast = _fetch_forecast(latitude, longitude)
+    data = _normalize_forecast(label or place.get("name") or "当前位置", place, forecast, "device")
+    _set_cached(cache_key, data)
     return {**data, "from_cache": False}

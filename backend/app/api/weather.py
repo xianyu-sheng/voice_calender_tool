@@ -1,16 +1,26 @@
 from flask import Blueprint, jsonify, request
 
-from ..services.weather_service import get_weather
+from ..services.weather_service import get_weather, get_weather_by_coordinates
 
 weather_bp = Blueprint("weather", __name__)
 
 
 @weather_bp.route("/api/weather", methods=["GET"])
 def get_city_weather():
-    city = request.args.get("city", "北京").strip() or "北京"
+    city = request.args.get("city", "").strip()
+    latitude = request.args.get("lat", "").strip()
+    longitude = request.args.get("lon", "").strip()
+    label = request.args.get("label", "当前位置").strip() or "当前位置"
 
     try:
-        data = get_weather(city)
+        if latitude and longitude:
+            data = get_weather_by_coordinates(float(latitude), float(longitude), label)
+        elif city:
+            data = get_weather(city)
+        else:
+            return jsonify({"success": False, "error": "需要城市名或经纬度"}), 400
         return jsonify({"success": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 502

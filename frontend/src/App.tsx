@@ -46,6 +46,13 @@ interface Calendar {
   color: string;
 }
 
+interface WeatherLocation {
+  city: string;
+  source: 'device' | 'manual' | 'fallback';
+  latitude?: number;
+  longitude?: number;
+}
+
 function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
@@ -61,9 +68,13 @@ function App() {
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
-  const [weatherCity, setWeatherCity] = useState<string>(() => localStorage.getItem('weather_city') || '北京');
+  const [weatherCity, setWeatherCity] = useState<string>(() => localStorage.getItem('weather_city') || '');
+  const [weatherLocation, setWeatherLocation] = useState<WeatherLocation>(() => ({
+    city: localStorage.getItem('weather_city') || '正在定位',
+    source: 'fallback',
+  }));
   const [weatherForecasts, setWeatherForecasts] = useState<Record<string, WeatherForecast>>({});
-  const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'locating' | 'error'>('idle');
   const [weatherError, setWeatherError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -93,7 +104,7 @@ function App() {
     fetchCalendars();
     fetchEvents();
     fetchTodos();
-    fetchWeather(weatherCity);
+    refreshWeatherByLocation();
     requestPermission();
     autoPostponeTodos();
 
@@ -256,8 +267,32 @@ function App() {
     return regexResult;
   };
 
-  const fetchWeather = async (city = weatherCity) => {
-    const normalizedCity = city.trim() || '北京';
+  const applyWeatherData = (data: any, source: WeatherLocation['source']) => {
+    const forecasts: WeatherForecast[] = data.forecasts || [];
+    const forecastMap = forecasts.reduce<Record<string, WeatherForecast>>((acc, forecast) => {
+      acc[forecast.date] = forecast;
+      return acc;
+    }, {});
+    const place = data.place || {};
+
+    setWeatherForecasts(forecastMap);
+    setWeatherLocation({
+      city: data.city || place.name || (source === 'device' ? '当前位置' : weatherCity || '备用城市'),
+      source,
+      latitude: place.latitude,
+      longitude: place.longitude,
+    });
+    setWeatherStatus('idle');
+  };
+
+  const fetchWeatherByCity = async (city = weatherCity, source: WeatherLocation['source'] = 'manual') => {
+    const normalizedCity = city.trim();
+    if (!normalizedCity) {
+      setWeatherStatus('error');
+      setWeatherError('请先允许定位，或在设置里填写备用城市');
+      return;
+    }
+
     setWeatherStatus('loading');
     setWeatherError('');
 
@@ -265,13 +300,7 @@ function App() {
       const response = await fetch(`http://localhost:8000/api/weather?city=${encodeURIComponent(normalizedCity)}`);
       const data = await response.json();
       if (data.success) {
-        const forecasts: WeatherForecast[] = data.data.forecasts || [];
-        const forecastMap = forecasts.reduce<Record<string, WeatherForecast>>((acc, forecast) => {
-          acc[forecast.date] = forecast;
-          return acc;
-        }, {});
-        setWeatherForecasts(forecastMap);
-        setWeatherStatus('idle');
+        applyWeatherData(data.data, source);
       } else {
         setWeatherError(data.error || '天气获取失败');
         setWeatherStatus('error');
@@ -281,6 +310,63 @@ function App() {
       setWeatherError('天气服务连接失败');
       setWeatherStatus('error');
     }
+  };
+
+  const fetchWeatherByCoordinates = async (latitude: number, longitude: number) => {
+    setWeatherStatus('loading');
+    setWeatherError('');
+
+    try {
+      const params = new URLSearchParams({
+        lat: String(latitude),
+        lon: String(longitude),
+        label: '当前位置',
+      });
+      const response = await fetch(`http://localhost:8000/api/weather?${params.toString()}`);
+      const data = await response.json();
+      if (data.success) {
+        applyWeatherData(data.data, 'device');
+      } else {
+        setWeatherError(data.error || '天气获取失败');
+        setWeatherStatus('error');
+        if (weatherCity.trim()) {
+          fetchWeatherByCity(weatherCity, 'fallback');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching weather by location:', error);
+      setWeatherError('天气服务连接失败');
+      setWeatherStatus('error');
+      if (weatherCity.trim()) {
+        fetchWeatherByCity(weatherCity, 'fallback');
+      }
+    }
+  };
+
+  const refreshWeatherByLocation = () => {
+    if (!navigator.geolocation) {
+      fetchWeatherByCity(weatherCity, 'fallback');
+      return;
+    }
+
+    setWeatherStatus('locating');
+    setWeatherError('');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        fetchWeatherByCoordinates(latitude, longitude);
+      },
+      (error) => {
+        console.warn('Geolocation failed:', error);
+        setWeatherError('无法读取电脑位置，已使用备用城市');
+        fetchWeatherByCity(weatherCity, 'fallback');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
   };
 
   const commandNeedsConfirmation = (command: ParsedCommand) => {
@@ -578,10 +664,15 @@ function App() {
 
     localStorage.setItem('deepseek_api_key', config.deepseekApiKey);
 
-    const nextWeatherCity = config.weatherCity.trim() || '北京';
+    const nextWeatherCity = config.weatherCity.trim();
     setWeatherCity(nextWeatherCity);
-    localStorage.setItem('weather_city', nextWeatherCity);
-    fetchWeather(nextWeatherCity);
+    if (nextWeatherCity) {
+      localStorage.setItem('weather_city', nextWeatherCity);
+      fetchWeatherByCity(nextWeatherCity, 'manual');
+    } else {
+      localStorage.removeItem('weather_city');
+      refreshWeatherByLocation();
+    }
 
     const backendConfig: any = {};
     if (config.deepseekApiKey) backendConfig.api_key = config.deepseekApiKey;
@@ -844,7 +935,7 @@ function App() {
                 events={filteredEvents}
                 todos={getTodosForDate(currentDate)}
                 weatherForecasts={weatherForecasts}
-                weatherCity={weatherCity}
+                weatherLocation={weatherLocation}
                 weatherStatus={weatherStatus}
                 weatherError={weatherError}
                 onTimeClick={handleTimeClick}

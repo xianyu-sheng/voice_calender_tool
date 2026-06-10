@@ -27,8 +27,13 @@ interface DayViewProps {
   events: Event[];
   todos: TodoItem[];
   weatherForecasts: Record<string, WeatherForecast>;
-  weatherCity: string;
-  weatherStatus: 'idle' | 'loading' | 'error';
+  weatherLocation: {
+    city: string;
+    source: 'device' | 'manual' | 'fallback';
+    latitude?: number;
+    longitude?: number;
+  };
+  weatherStatus: 'idle' | 'loading' | 'locating' | 'error';
   weatherError: string;
   onTimeClick: (date: Date) => void;
   onEventClick: (event: Event) => void;
@@ -44,7 +49,7 @@ const DayView: React.FC<DayViewProps> = ({
   events,
   todos,
   weatherForecasts,
-  weatherCity,
+  weatherLocation,
   weatherStatus,
   weatherError,
   onTimeClick,
@@ -74,6 +79,11 @@ const DayView: React.FC<DayViewProps> = ({
   const weather = getWeatherDisplay(weatherForecasts[currentDateStr]);
   const metaHighlights = [calendarMeta.holiday, calendarMeta.solarTerm, calendarMeta.festival]
     .filter((item, index, array): item is string => Boolean(item) && array.indexOf(item) === index);
+  const locationSourceLabel = weatherLocation.source === 'device'
+    ? '定位'
+    : weatherLocation.source === 'manual'
+      ? '手动'
+      : '备用';
 
   const completedTodos = todos.filter(t => t.completed).length;
   const todoProgress = todos.length > 0
@@ -132,10 +142,13 @@ const DayView: React.FC<DayViewProps> = ({
             )}
           </div>
           <div className={`day-weather-summary ${weather.unavailable ? 'unavailable' : ''}`}>
-            <span className="day-weather-city">{weatherCity}</span>
+            <span className="day-weather-city">📍 {weatherLocation.city}</span>
+            <span className={`location-source ${weatherLocation.source}`}>{locationSourceLabel}</span>
             <span className="day-weather-icon">{weather.icon}</span>
             <span className="day-weather-label">
-              {weatherStatus === 'loading'
+              {weatherStatus === 'locating'
+                ? '正在定位'
+                : weatherStatus === 'loading'
                 ? '天气更新中'
                 : weatherStatus === 'error'
                   ? weatherError || '天气获取失败'

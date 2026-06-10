@@ -931,6 +931,25 @@ body {
   color: #8c8c8c;
 }
 
+.location-source {
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f0f5ff;
+  color: #1890ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.location-source.device {
+  background: #f6ffed;
+  color: #389e0d;
+}
+
+.location-source.fallback {
+  background: #fff7e6;
+  color: #d46b08;
+}
+
 .day-weather-icon {
   font-size: 16px;
 }

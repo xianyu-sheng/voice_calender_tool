@@ -19,13 +19,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   currentConfig
 }) => {
   const [deepseekKey, setDeepseekKey] = useState('');
-  const [weatherCity, setWeatherCity] = useState('北京');
+  const [weatherCity, setWeatherCity] = useState('');
   const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setDeepseekKey(currentConfig.deepseekApiKey);
-      setWeatherCity(currentConfig.weatherCity || '北京');
+      setWeatherCity(currentConfig.weatherCity || '');
     }
   }, [isOpen, currentConfig]);
 
@@ -66,20 +66,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="settings-info">
             <div className="info-text">
               <h3>天气</h3>
-              <p>使用 Open-Meteo 获取当前城市未来 16 天天气。</p>
-              <p>超过预报范围的日期会显示默认符号。</p>
+              <p>优先读取电脑位置并按经纬度获取未来 16 天天气。</p>
+              <p>无法定位时才使用下面的备用城市。</p>
             </div>
           </div>
 
           <div className="form-group">
-            <label>天气城市</label>
+            <label>备用城市</label>
             <input
               type="text"
               value={weatherCity}
               onChange={e => setWeatherCity(e.target.value)}
-              placeholder="例如：北京、上海、广州"
+              placeholder="例如：重庆、上海、广州"
             />
-            <p className="form-hint">保存后会自动刷新天气预报。</p>
+            <p className="form-hint">正常情况下会自动使用电脑定位；这里仅作为定位失败时的兜底。</p>
           </div>
 
           <div className="sidebar-divider" style={{ margin: '16px 0' }}></div>
