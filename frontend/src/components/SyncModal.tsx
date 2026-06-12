@@ -30,22 +30,36 @@ interface DesktopStatus {
   log_path?: string;
 }
 
+interface UsbSyncStatus {
+  adb_available: boolean;
+  adb_path?: string;
+  devices: Array<{ serial: string; state: string }>;
+  reverse_enabled: boolean;
+  last_checked?: string;
+  last_error?: string;
+  phone_url: string;
+}
+
 interface SyncModalProps {
   isOpen: boolean;
   isInstallable: boolean;
   isStandalone: boolean;
+  pendingSyncCount: number;
   onClose: () => void;
   onInstall: () => Promise<boolean>;
   onRefreshData: () => void;
+  onFlushPending: () => Promise<void>;
 }
 
 const SyncModal: React.FC<SyncModalProps> = ({
   isOpen,
   isInstallable,
   isStandalone,
+  pendingSyncCount,
   onClose,
   onInstall,
   onRefreshData,
+  onFlushPending,
 }) => {
   const [syncInfo, setSyncInfo] = useState<SyncInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +68,7 @@ const SyncModal: React.FC<SyncModalProps> = ({
   const [testing, setTesting] = useState(false);
   const [backups, setBackups] = useState<BackupFile[]>([]);
   const [desktopStatus, setDesktopStatus] = useState<DesktopStatus | null>(null);
+  const [usbStatus, setUsbStatus] = useState<UsbSyncStatus | null>(null);
   const [busyAction, setBusyAction] = useState('');
 
   const isSecure = typeof window !== 'undefined' ? window.isSecureContext : false;
@@ -65,6 +80,7 @@ const SyncModal: React.FC<SyncModalProps> = ({
     fetchSyncInfo();
     fetchBackups();
     fetchDesktopStatus();
+    fetchUsbStatus();
   }, [isOpen]);
 
   const fetchSyncInfo = async () => {
@@ -107,6 +123,18 @@ const SyncModal: React.FC<SyncModalProps> = ({
       }
     } catch (error) {
       console.error('Desktop status error:', error);
+    }
+  };
+
+  const fetchUsbStatus = async () => {
+    try {
+      const response = await apiFetch('/api/usb-sync/status');
+      const data = await response.json();
+      if (data.success) {
+        setUsbStatus(data.data);
+      }
+    } catch (error) {
+      console.error('USB sync status error:', error);
     }
   };
 
@@ -211,6 +239,30 @@ const SyncModal: React.FC<SyncModalProps> = ({
     }
   };
 
+  const handleRefreshUsbSync = async () => {
+    setBusyAction('usb');
+    setMessage('');
+    try {
+      const response = await apiFetch('/api/usb-sync/refresh', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        setUsbStatus(data.data);
+        if (data.data.reverse_enabled) {
+          setMessage('USB 同步通道已打开');
+        } else {
+          setMessage(data.data.last_error || '未检测到可用 USB 同步通道');
+        }
+      } else {
+        setMessage(data.error || 'USB 同步检测失败');
+      }
+    } catch (error) {
+      console.error('USB sync refresh error:', error);
+      setMessage('USB 同步检测失败');
+    } finally {
+      setBusyAction('');
+    }
+  };
+
   const formatSize = (size: number) => {
     if (size >= 1024 * 1024) {
       return `${(size / 1024 / 1024).toFixed(1)} MB`;
@@ -306,6 +358,34 @@ const SyncModal: React.FC<SyncModalProps> = ({
               <button className="btn btn-primary" onClick={handleSaveApiBase} disabled={testing}>
                 {testing ? '检测中' : '连接'}
               </button>
+            </div>
+          </section>
+
+          <section className="sync-section">
+            <div className="sync-section-header">
+              <h3>USB 同步</h3>
+              <span className={`sync-pill ${usbStatus?.reverse_enabled ? 'ok' : usbStatus?.adb_available ? 'ready' : ''}`}>
+                {usbStatus?.reverse_enabled ? '已连接' : usbStatus?.adb_available ? '等待手机' : '需要 adb'}
+              </span>
+            </div>
+            <div className="install-actions">
+              <button className="btn btn-primary" onClick={handleRefreshUsbSync} disabled={busyAction === 'usb'}>
+                {busyAction === 'usb' ? '检测中' : '检测 USB'}
+              </button>
+              <button className="btn btn-secondary" onClick={onFlushPending} disabled={pendingSyncCount === 0}>
+                同步待传 {pendingSyncCount}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => copyText(usbStatus?.phone_url || 'http://127.0.0.1:8000')}
+              >
+                复制手机地址
+              </button>
+            </div>
+            <div className="usb-sync-details">
+              <span>手机地址：{usbStatus?.phone_url || 'http://127.0.0.1:8000'}</span>
+              <span>设备：{usbStatus?.devices?.length ? usbStatus.devices.map(device => `${device.serial} ${device.state}`).join('、') : '未检测到'}</span>
+              {usbStatus?.last_error && <span>{usbStatus.last_error}</span>}
             </div>
           </section>
 

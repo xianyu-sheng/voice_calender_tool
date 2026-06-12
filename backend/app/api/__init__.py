@@ -8,6 +8,7 @@ from .sync import sync_bp
 from .backup import backup_bp
 from .desktop import desktop_bp
 from .assistant import assistant_bp
+from .usb_sync import usb_sync_bp
 
 __all__ = [
     'events_bp',
@@ -20,4 +21,5 @@ __all__ = [
     'backup_bp',
     'desktop_bp',
     'assistant_bp',
+    'usb_sync_bp',
 ]

@@ -15,7 +15,7 @@ base_path = get_base_path()
 sys.path.insert(0, os.path.join(base_path, 'backend'))
 
 from app import db
-from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp, weather_bp, sync_bp, backup_bp, desktop_bp, assistant_bp
+from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp, weather_bp, sync_bp, backup_bp, desktop_bp, assistant_bp, usb_sync_bp
 
 app = Flask(__name__, static_folder=os.path.join(base_path, 'frontend', 'dist'))
 CORS(app)
@@ -39,6 +39,7 @@ app.register_blueprint(sync_bp)
 app.register_blueprint(backup_bp)
 app.register_blueprint(desktop_bp)
 app.register_blueprint(assistant_bp)
+app.register_blueprint(usb_sync_bp)
 
 with app.app_context():
     try:

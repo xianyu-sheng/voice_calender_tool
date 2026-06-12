@@ -2008,6 +2008,21 @@ body {
   word-break: break-all;
 }
 
+.usb-sync-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  color: #595959;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
 .backup-latest {
   display: flex;
   flex-direction: column;

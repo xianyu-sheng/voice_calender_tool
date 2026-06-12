@@ -16,6 +16,7 @@ import { useReminder } from './hooks/useReminder'
 import { parseVoiceCommand } from './utils/voiceCommandParser'
 import type { ParsedCommand } from './utils/voiceCommandParser'
 import { apiFetch, apiUrl } from './utils/api'
+import { addPendingWrite, flushPendingWrites, getPendingWrites } from './utils/offlineQueue'
 import { toLocalDateStr, todayStr } from './utils/dateUtils'
 import type { WeatherForecast } from './utils/weatherUtils'
 import { getWeatherDisplay } from './utils/weatherUtils'
@@ -87,6 +88,7 @@ function App() {
   const [weatherError, setWeatherError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState(() => getPendingWrites().length);
   const [isStandalone, setIsStandalone] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
@@ -307,15 +309,35 @@ function App() {
     fetchTodos();
   };
 
+  const syncPendingWrites = async () => {
+    const result = await flushPendingWrites(apiFetch);
+    setPendingSyncCount(result.remaining);
+    if (result.synced > 0) {
+      refreshCoreData();
+      setVoiceFeedback(`已同步 ${result.synced} 条手机离线记录`);
+      setTimeout(() => setVoiceFeedback(null), 3000);
+    }
+  };
+
   useEffect(() => {
-    const intervalId = window.setInterval(refreshCoreData, 30000);
-    const handleFocus = () => refreshCoreData();
+    const intervalId = window.setInterval(() => {
+      refreshCoreData();
+      syncPendingWrites();
+    }, 30000);
+    const handleFocus = () => {
+      refreshCoreData();
+      syncPendingWrites();
+    };
+    const handleOnline = () => syncPendingWrites();
 
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
+    syncPendingWrites();
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
     };
   }, []);
 
@@ -700,7 +722,13 @@ function App() {
         fetchEvents();
       }
     } catch (error) {
-      setVoiceFeedback('创建事件失败，请重试');
+      addPendingWrite('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(eventData),
+      }, eventData.title);
+      setPendingSyncCount(getPendingWrites().length);
+      setVoiceFeedback(`电脑暂时不在线，已先保存在手机：${eventData.title}`);
     }
   };
 
@@ -726,7 +754,13 @@ function App() {
         fetchTodos();
       }
     } catch (error) {
-      setVoiceFeedback('创建任务失败，请重试');
+      addPendingWrite('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(todoData),
+      }, todoData.title);
+      setPendingSyncCount(getPendingWrites().length);
+      setVoiceFeedback(`电脑暂时不在线，已先保存在手机：${todoData.title}`);
     }
   };
 
@@ -1228,6 +1262,8 @@ function App() {
         isOpen={syncOpen}
         isInstallable={!!installPrompt}
         isStandalone={isStandalone}
+        pendingSyncCount={pendingSyncCount}
+        onFlushPending={syncPendingWrites}
         onClose={() => setSyncOpen(false)}
         onInstall={handleInstallApp}
         onRefreshData={refreshCoreData}

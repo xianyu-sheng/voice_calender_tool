@@ -79,6 +79,7 @@ flask_app.register_blueprint(backend_api.sync_bp)
 flask_app.register_blueprint(backend_api.backup_bp)
 flask_app.register_blueprint(backend_api.desktop_bp)
 flask_app.register_blueprint(backend_api.assistant_bp)
+flask_app.register_blueprint(backend_api.usb_sync_bp)
 
 with flask_app.app_context():
     try:
@@ -520,6 +521,11 @@ if __name__ == "__main__":
     ensure_daily_backup()
     reminder_stop_event = threading.Event()
     threading.Thread(target=reminder_loop, args=(reminder_stop_event,), daemon=True).start()
+    try:
+        importlib.import_module("app.services.usb_sync_service").start_usb_sync_monitor()
+        logger.info("USB sync monitor started")
+    except Exception:
+        logger.exception("USB sync monitor failed to start")
     tray = WindowsTray(lambda: os._exit(0))
     tray.start()
 
