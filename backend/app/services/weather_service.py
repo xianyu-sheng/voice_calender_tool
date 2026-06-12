@@ -31,11 +31,11 @@ def _coordinate_cache_key(latitude: float, longitude: float) -> str:
     return f"coord:{latitude:.4f},{longitude:.4f}"
 
 
-def _get_cached(key: str) -> dict[str, Any] | None:
+def _get_cached(key: str, allow_stale: bool = False) -> dict[str, Any] | None:
     entry = _weather_cache.get(key)
     if not entry:
         return None
-    if datetime.now() - entry.created_at > timedelta(seconds=CACHE_TTL_SECONDS):
+    if not allow_stale and datetime.now() - entry.created_at > timedelta(seconds=CACHE_TTL_SECONDS):
         return None
     return entry.data
 
@@ -165,11 +165,17 @@ def get_weather(city: str) -> dict[str, Any]:
     if cached:
         return {**cached, "from_cache": True}
 
-    place = _geocode_city(normalized_city)
-    forecast = _fetch_forecast(float(place["latitude"]), float(place["longitude"]))
-    data = _normalize_forecast(normalized_city, place, forecast, "city")
-    _set_cached(cache_key, data)
-    return {**data, "from_cache": False}
+    try:
+        place = _geocode_city(normalized_city)
+        forecast = _fetch_forecast(float(place["latitude"]), float(place["longitude"]))
+        data = _normalize_forecast(normalized_city, place, forecast, "city")
+        _set_cached(cache_key, data)
+        return {**data, "from_cache": False}
+    except Exception:
+        stale = _get_cached(cache_key, allow_stale=True)
+        if stale:
+            return {**stale, "from_cache": True, "cache_stale": True}
+        raise
 
 
 def get_weather_by_coordinates(latitude: float, longitude: float, label: str = "当前位置") -> dict[str, Any]:
@@ -182,17 +188,23 @@ def get_weather_by_coordinates(latitude: float, longitude: float, label: str = "
         return {**cached, "from_cache": True}
 
     try:
-        place = _reverse_geocode(latitude, longitude)
-    except Exception:
-        place = {
-            "name": label or "当前位置",
-            "country": None,
-            "admin1": None,
-            "latitude": latitude,
-            "longitude": longitude,
-        }
+        try:
+            place = _reverse_geocode(latitude, longitude)
+        except Exception:
+            place = {
+                "name": label or "当前位置",
+                "country": None,
+                "admin1": None,
+                "latitude": latitude,
+                "longitude": longitude,
+            }
 
-    forecast = _fetch_forecast(latitude, longitude)
-    data = _normalize_forecast(label or place.get("name") or "当前位置", place, forecast, "device")
-    _set_cached(cache_key, data)
-    return {**data, "from_cache": False}
+        forecast = _fetch_forecast(latitude, longitude)
+        data = _normalize_forecast(label or place.get("name") or "当前位置", place, forecast, "device")
+        _set_cached(cache_key, data)
+        return {**data, "from_cache": False}
+    except Exception:
+        stale = _get_cached(cache_key, allow_stale=True)
+        if stale:
+            return {**stale, "from_cache": True, "cache_stale": True}
+        raise

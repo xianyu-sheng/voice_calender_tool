@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { apiFetch } from '../utils/api';
 import { normalizeSpeechText } from '../utils/speechText';
 
 export type SpeechStatus = 'idle' | 'connecting' | 'listening' | 'error';
@@ -256,7 +257,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       const formData = new FormData();
       formData.append('audio', wavBlob, 'recording.wav');
 
-      const response = await fetch('http://localhost:8000/api/voice/transcribe', {
+      const response = await apiFetch('/api/voice/transcribe', {
         method: 'POST',
         body: formData,
       });
@@ -280,7 +281,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.error('✗ 网络错误:', err);
       setInterimTranscript('');
       setStatus('error');
-      setError('连接后端服务失败，请确认后端已启动 (端口 8000)');
+      setError('连接数据主机失败，请确认电脑端应用正在运行');
     }
   };
 

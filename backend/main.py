@@ -2,13 +2,13 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from app import db
-from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp, weather_bp
+from app.api import events_bp, calendars_bp, reminders_bp, todos_bp, voice_bp, weather_bp, sync_bp, backup_bp, desktop_bp, assistant_bp
 
 # 加载 .env 文件中的环境变量
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
+CORS(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///calendar.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -21,6 +21,10 @@ app.register_blueprint(reminders_bp)
 app.register_blueprint(todos_bp)
 app.register_blueprint(voice_bp)
 app.register_blueprint(weather_bp)
+app.register_blueprint(sync_bp)
+app.register_blueprint(backup_bp)
+app.register_blueprint(desktop_bp)
+app.register_blueprint(assistant_bp)
 
 with app.app_context():
     db.create_all()

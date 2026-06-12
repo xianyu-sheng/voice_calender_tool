@@ -1,5 +1,5 @@
 // Service Worker — 离线缓存核心资源
-const CACHE_NAME = 'voice-calendar-v1';
+const CACHE_NAME = 'voice-calendar-v2';
 
 const PRECACHE_URLS = [
   '/',

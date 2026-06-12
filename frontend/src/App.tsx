@@ -7,6 +7,7 @@ import DayView from './components/DayView'
 import EventModal from './components/EventModal'
 import TodoModal from './components/TodoModal'
 import SettingsModal from './components/SettingsModal'
+import SyncModal from './components/SyncModal'
 import VoiceFeedback from './components/VoiceFeedback'
 import VoiceLLMFeedback from './components/VoiceLLMFeedback'
 import { useSpeechRecognition } from './hooks/useSpeechRecognition'
@@ -14,8 +15,10 @@ import { useSpeechSynthesis } from './hooks/useSpeechSynthesis'
 import { useReminder } from './hooks/useReminder'
 import { parseVoiceCommand } from './utils/voiceCommandParser'
 import type { ParsedCommand } from './utils/voiceCommandParser'
+import { apiFetch, apiUrl } from './utils/api'
 import { toLocalDateStr, todayStr } from './utils/dateUtils'
 import type { WeatherForecast } from './utils/weatherUtils'
+import { getWeatherDisplay } from './utils/weatherUtils'
 import './App.css'
 
 interface CalendarEvent {
@@ -53,6 +56,11 @@ interface WeatherLocation {
   longitude?: number;
 }
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
+
 function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('month');
@@ -67,6 +75,7 @@ function App() {
   const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null);
   const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('deepseek_api_key') || '');
   const [weatherCity, setWeatherCity] = useState<string>(() => localStorage.getItem('weather_city') || '');
   const [weatherLocation, setWeatherLocation] = useState<WeatherLocation>(() => ({
@@ -77,6 +86,11 @@ function App() {
   const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'locating' | 'error'>('idle');
   const [weatherError, setWeatherError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isStandalone, setIsStandalone] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+  });
 
   // LLM 可视化状态
   const [llmStatus, setLlmStatus] = useState<'idle' | 'calling' | 'parsing' | 'result' | 'error'>('idle');
@@ -116,7 +130,7 @@ function App() {
       if (savedDeepseek) config.api_key = savedDeepseek;
 
       console.log('[App] 同步 API key 到后端...');
-      fetch('http://localhost:8000/api/voice/config', {
+      apiFetch('/api/voice/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -126,6 +140,26 @@ function App() {
         console.error('[App] API keys 同步失败:', e);
       });
     }
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleAppInstalled = () => {
+      setInstallPrompt(null);
+      setIsStandalone(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   useEffect(() => {
@@ -153,7 +187,7 @@ function App() {
 
   const fetchCalendars = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/calendars');
+      const response = await apiFetch('/api/calendars');
       const data = await response.json();
       if (data.success) {
         setCalendars(data.data);
@@ -166,7 +200,7 @@ function App() {
 
   const fetchEvents = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/events');
+      const response = await apiFetch('/api/events');
       const data = await response.json();
       if (data.success) {
         setEvents(data.data);
@@ -184,7 +218,7 @@ function App() {
 
   const fetchTodos = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/todos');
+      const response = await apiFetch('/api/todos');
       const data = await response.json();
       if (data.success) {
         setTodos(data.data);
@@ -196,7 +230,7 @@ function App() {
 
   const autoPostponeTodos = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/todos/postpone', {
+      const response = await apiFetch('/api/todos/postpone', {
         method: 'POST'
       });
       const data = await response.json();
@@ -219,7 +253,7 @@ function App() {
     try {
       parsingTimer = setTimeout(() => setLlmStatus('parsing'), 800);
 
-      const response = await fetch('http://localhost:8000/api/voice/parse', {
+      const response = await apiFetch('/api/voice/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, use_llm: true, api_key: apiKey || undefined })
@@ -267,6 +301,24 @@ function App() {
     return regexResult;
   };
 
+  const refreshCoreData = () => {
+    fetchCalendars();
+    fetchEvents();
+    fetchTodos();
+  };
+
+  useEffect(() => {
+    const intervalId = window.setInterval(refreshCoreData, 30000);
+    const handleFocus = () => refreshCoreData();
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   const applyWeatherData = (data: any, source: WeatherLocation['source']) => {
     const forecasts: WeatherForecast[] = data.forecasts || [];
     const forecastMap = forecasts.reduce<Record<string, WeatherForecast>>((acc, forecast) => {
@@ -297,7 +349,7 @@ function App() {
     setWeatherError('');
 
     try {
-      const response = await fetch(`http://localhost:8000/api/weather?city=${encodeURIComponent(normalizedCity)}`);
+      const response = await apiFetch(`/api/weather?city=${encodeURIComponent(normalizedCity)}`);
       const data = await response.json();
       if (data.success) {
         applyWeatherData(data.data, source);
@@ -322,7 +374,7 @@ function App() {
         lon: String(longitude),
         label: '当前位置',
       });
-      const response = await fetch(`http://localhost:8000/api/weather?${params.toString()}`);
+      const response = await apiFetch(`/api/weather?${params.toString()}`);
       const data = await response.json();
       if (data.success) {
         applyWeatherData(data.data, 'device');
@@ -373,6 +425,138 @@ function App() {
     return ['create_event', 'create_todo', 'complete_todo', 'delete_event', 'delete_todo'].includes(command.intent);
   };
 
+  const startOfWeek = (date: Date) => {
+    const result = new Date(date);
+    const day = result.getDay() || 7;
+    result.setDate(result.getDate() - day + 1);
+    result.setHours(0, 0, 0, 0);
+    return result;
+  };
+
+  const resolveQueryDate = (text: string) => {
+    const target = new Date();
+    if (text.includes('明天')) {
+      target.setDate(target.getDate() + 1);
+    } else if (text.includes('后天')) {
+      target.setDate(target.getDate() + 2);
+    }
+    target.setHours(0, 0, 0, 0);
+    return target;
+  };
+
+  const getEventsForDate = (date: Date) => {
+    const dateStr = toLocalDateStr(date);
+    return events.filter(event => toLocalDateStr(new Date(event.start_time)) === dateStr);
+  };
+
+  const getDayLoad = (date: Date) => {
+    const dateEvents = getEventsForDate(date);
+    const dateTodos = getTodosForDate(date);
+    const eventMinutes = dateEvents.reduce((sum, event) => {
+      const start = new Date(event.start_time).getTime();
+      const end = new Date(event.end_time).getTime();
+      return sum + Math.max(0, Math.round((end - start) / 60000));
+    }, 0);
+    return {
+      date,
+      events: dateEvents,
+      todos: dateTodos,
+      score: eventMinutes + dateTodos.filter(todo => !todo.completed).length * 45,
+    };
+  };
+
+  const formatEventBrief = (event: CalendarEvent) => {
+    const start = new Date(event.start_time);
+    return `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')} ${event.title}`;
+  };
+
+  const runAssistantQuery = async (text: string) => {
+    try {
+      const response = await apiFetch('/api/assistant/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          weather_forecasts: weatherForecasts,
+          weather_location: weatherLocation,
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'assistant query failed');
+      }
+
+      const result = data.data;
+      if (result?.date) {
+        const targetDate = new Date(`${result.date}T00:00:00`);
+        if (!Number.isNaN(targetDate.getTime())) {
+          setCurrentDate(targetDate);
+        }
+      }
+      if (result?.view === 'day' || result?.view === 'week' || result?.view === 'month') {
+        setView(result.view);
+      }
+
+      return result?.answer || '我已经帮你看过了。';
+    } catch (error) {
+      console.error('Assistant query error:', error);
+      return answerScheduleQuestion(text);
+    }
+  };
+
+  const answerScheduleQuestion = (text: string) => {
+    if (text.includes('哪天') && (text.includes('空') || text.includes('有空'))) {
+      const weekStart = startOfWeek(text.includes('下周') ? new Date(Date.now() + 7 * 86400000) : new Date());
+      const searchStart = text.includes('下周') ? weekStart : new Date(Math.max(weekStart.getTime(), new Date().setHours(0, 0, 0, 0)));
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const dayCount = Math.max(1, Math.round((weekEnd.getTime() - searchStart.getTime()) / 86400000) + 1);
+      const weekLoads = Array.from({ length: dayCount }, (_, index) => {
+        const date = new Date(searchStart);
+        date.setDate(searchStart.getDate() + index);
+        return getDayLoad(date);
+      });
+      const lightest = [...weekLoads].sort((a, b) => a.score - b.score)[0];
+      const weekday = lightest.date.toLocaleDateString('zh-CN', { weekday: 'long', month: 'numeric', day: 'numeric' });
+      setCurrentDate(lightest.date);
+      setView('week');
+      return `${weekday}相对比较空，有 ${lightest.events.length} 个日程、${lightest.todos.length} 个任务。`;
+    }
+
+    const targetDate = resolveQueryDate(text);
+    const dateLabel = text.includes('明天') ? '明天' : text.includes('后天') ? '后天' : '今天';
+    const dateEvents = getEventsForDate(targetDate);
+    const dateTodos = getTodosForDate(targetDate);
+    const forecast = weatherForecasts[toLocalDateStr(targetDate)];
+    const weather = getWeatherDisplay(forecast);
+
+    setCurrentDate(targetDate);
+    setView('day');
+
+    if (text.includes('天气') || text.includes('出门') || text.includes('外出')) {
+      if (weather.unavailable) {
+        return `${dateLabel}暂时没有可用天气预报，我已经切到${dateLabel}的日程。`;
+      }
+      const rainy = ['雨', '雷', '雪'].some(keyword => weather.label.includes(keyword));
+      const taskText = dateEvents.length || dateTodos.length
+        ? `另外你有 ${dateEvents.length} 个日程、${dateTodos.length} 个任务。`
+        : '当天安排不多。';
+      return `${dateLabel}${weather.label}，${weather.temperature || '温度暂无'}。${rainy ? '出门建议带伞并预留路上时间。' : '天气看起来适合出门。'}${taskText}`;
+    }
+
+    if (dateEvents.length === 0 && dateTodos.length === 0) {
+      return `${dateLabel}暂时没有日程和任务，比较空。`;
+    }
+
+    const eventText = dateEvents.length
+      ? `日程有 ${dateEvents.slice(0, 3).map(formatEventBrief).join('、')}`
+      : '没有日程';
+    const todoText = dateTodos.length
+      ? `任务有 ${dateTodos.slice(0, 3).map(todo => todo.title).join('、')}`
+      : '没有任务';
+    return `${dateLabel}${eventText}；${todoText}。`;
+  };
+
   const showCommandConfirmation = (command: ParsedCommand) => {
     setPendingCommand(command);
     setLlmRawText(command.rawText);
@@ -395,6 +579,15 @@ function App() {
   const handleVoiceCommand = async (text: string) => {
     console.log('🔊 语音输入:', text);
 
+    const localCommand = parseVoiceCommand(text);
+    if (localCommand.intent === 'assistant_query') {
+      localCommand.source = 'regex';
+      setLlmStatus('idle');
+      setLlmResult(null);
+      await executeCommand(localCommand);
+      return;
+    }
+
     const command = await parseWithHybrid(text);
     console.log('📋 解析结果:', command);
 
@@ -406,7 +599,7 @@ function App() {
     setLlmStatus('idle');
     setLlmResult(null);
 
-    executeCommand(command);
+    await executeCommand(command);
   };
 
   // 用 ref 保存最新的 handleVoiceCommand，避免 effect 依赖问题
@@ -423,6 +616,9 @@ function App() {
         break;
       case 'view_events':
         handleVoiceViewEvents(command);
+        break;
+      case 'assistant_query':
+        setVoiceFeedback(await runAssistantQuery(command.rawText));
         break;
       case 'delete_event':
         setVoiceFeedback('请在界面上选择要删除的事件');
@@ -492,7 +688,7 @@ function App() {
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/events', {
+      const response = await apiFetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(eventData)
@@ -518,7 +714,7 @@ function App() {
     };
 
     try {
-      const response = await fetch('http://localhost:8000/api/todos', {
+      const response = await apiFetch('/api/todos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(todoData)
@@ -634,7 +830,7 @@ function App() {
     };
 
     try {
-      const response = await fetch(`http://localhost:8000/api/events/${eventId}`, {
+      const response = await apiFetch(`/api/events/${eventId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedEvent)
@@ -677,7 +873,7 @@ function App() {
     const backendConfig: any = {};
     if (config.deepseekApiKey) backendConfig.api_key = config.deepseekApiKey;
 
-    fetch('http://localhost:8000/api/voice/config', {
+    apiFetch('/api/voice/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(backendConfig)
@@ -685,6 +881,22 @@ function App() {
 
     setVoiceFeedback('设置已保存');
     setTimeout(() => setVoiceFeedback(null), 2000);
+  };
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) {
+      return false;
+    }
+
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === 'accepted') {
+      setInstallPrompt(null);
+      setIsStandalone(true);
+      return true;
+    }
+
+    return false;
   };
 
   const handleQuickAction = (action: string) => {
@@ -718,6 +930,9 @@ function App() {
       case 'settings':
         setSettingsOpen(true);
         break;
+      case 'sync':
+        setSyncOpen(true);
+        break;
     }
   };
 
@@ -725,8 +940,8 @@ function App() {
     try {
       const method = event.id ? 'PUT' : 'POST';
       const url = event.id
-        ? `http://localhost:8000/api/events/${event.id}`
-        : 'http://localhost:8000/api/events';
+        ? apiUrl(`/api/events/${event.id}`)
+        : apiUrl('/api/events');
 
       const response = await fetch(url, {
         method,
@@ -753,7 +968,7 @@ function App() {
 
   const handleDeleteEvent = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/events/${id}`, {
+      const response = await apiFetch(`/api/events/${id}`, {
         method: 'DELETE'
       });
 
@@ -769,7 +984,7 @@ function App() {
 
   const handleToggleTodo = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/todos/${id}/toggle`, {
+      const response = await apiFetch(`/api/todos/${id}/toggle`, {
         method: 'PUT'
       });
 
@@ -784,7 +999,7 @@ function App() {
 
   const handleUpdateTodoProgress = async (id: number, progress: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/todos/${id}/progress`, {
+      const response = await apiFetch(`/api/todos/${id}/progress`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ progress })
@@ -801,7 +1016,7 @@ function App() {
 
   const handleUpdateEventProgress = async (id: number, progress: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/events/${id}/progress`, {
+      const response = await apiFetch(`/api/events/${id}/progress`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ progress })
@@ -820,8 +1035,8 @@ function App() {
     try {
       const method = todo.id ? 'PUT' : 'POST';
       const url = todo.id
-        ? `http://localhost:8000/api/todos/${todo.id}`
-        : 'http://localhost:8000/api/todos';
+        ? apiUrl(`/api/todos/${todo.id}`)
+        : apiUrl('/api/todos');
 
       const response = await fetch(url, {
         method,
@@ -841,7 +1056,7 @@ function App() {
 
   const handleDeleteTodo = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/todos/${id}`, {
+      const response = await apiFetch(`/api/todos/${id}`, {
         method: 'DELETE'
       });
 
@@ -1007,6 +1222,15 @@ function App() {
           deepseekApiKey: apiKey,
           weatherCity,
         }}
+      />
+
+      <SyncModal
+        isOpen={syncOpen}
+        isInstallable={!!installPrompt}
+        isStandalone={isStandalone}
+        onClose={() => setSyncOpen(false)}
+        onInstall={handleInstallApp}
+        onRefreshData={refreshCoreData}
       />
     </div>
   );

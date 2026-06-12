@@ -2,7 +2,7 @@ import { toLocalDateStr } from './dateUtils';
 import { normalizeSpeechText } from './speechText';
 
 export interface ParsedCommand {
-  intent: 'create_event' | 'delete_event' | 'view_events' | 'edit_event' | 'set_reminder' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'view_todos' | 'unknown';
+  intent: 'create_event' | 'delete_event' | 'view_events' | 'edit_event' | 'set_reminder' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'view_todos' | 'assistant_query' | 'unknown';
   title?: string;
   date?: string;
   time?: string;
@@ -16,6 +16,13 @@ export interface ParsedCommand {
 }
 
 const INTENT_PATTERNS = {
+  assistant_query: [
+    /(.+)(适合|方便|可以)(出门|外出|出去)/,
+    /(明天|今天|后天|本周|这周|下周).*(有什么|哪些|多少|空|忙|安排|日程|任务|待办|天气)/,
+    /(我)?(明天|今天|后天|本周|这周|下周).*(有空|忙不忙|空不空)/,
+    /(这周|本周|下周).*(哪天|什么时候).*(空|有空|比较空|最空)/,
+    /(帮我)?(看看|分析|总结).*(安排|日程|任务|待办|天气)/,
+  ],
   create_event: [
     /创建(一个)?(.*)事件/,
     /新建(一个)?(.*)事件/,

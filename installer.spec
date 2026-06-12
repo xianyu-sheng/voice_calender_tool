@@ -1,39 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_dynamic_libs
-
 block_cipher = None
 
 a = Analysis(
-    ['desktop_app.py'],
-    pathex=['backend'],
-    binaries=collect_dynamic_libs('vosk'),
+    ['installer_app.py'],
+    pathex=[],
+    binaries=[],
     datas=[
-        ('frontend/dist', 'frontend/dist'),
-        ('backend', 'backend'),
+        ('build/installer_payload/VoiceCalendar.exe', 'payload'),
     ],
-    hiddenimports=[
-        'flask',
-        'flask_cors',
-        'flask_sqlalchemy',
-        'sqlalchemy',
-        'sqlalchemy.sql.default_comparator',
-        'vosk',
-        'dotenv',
-        'json',
-        'wave',
-        'urllib.request',
-        'requests',
-        'webview',
-        'pythonnet',
-        'clr_loader',
-        'proxy_tools',
-        'bottle',
-        'urllib3',
-        'certifi',
-        'charset_normalizer',
-        'idna',
-    ],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -53,7 +29,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='语音日历工具',
+    name='语音日历工具-Setup',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

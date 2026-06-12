@@ -54,6 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { icon: 'W', text: '查看本周', action: 'week' },
     { icon: 'M', text: '查看本月', action: 'month' },
     { icon: '⚙', text: '语音设置', action: 'settings' },
+    { icon: '⇄', text: '设备同步', action: 'sync' },
   ];
 
   const handleAction = (action: string) => {
